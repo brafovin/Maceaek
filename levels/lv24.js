@@ -33,12 +33,12 @@ const DGAP = 0.75;          // odległość każdych drzwi od osi przegrody
 const GRATE_Y = 3.0;        // powyżej – kratka w przegrodzie M|E (strzał z E w łatę MC)
 
 const MC = { x0: 10.8, x1: 13.2, z0: -5.2, z1: -2.8 };                      // łata sufitowa nad B
-const EF = { x0: -12, x1: -6, z0: -29, z1: -23 };                           // łata podłogowa w E (wlot zsypu) – duża, żeby gracz wskakujący w otwór był wypychany na łatę, nie w pustkę
+const EF = { x0: -13, x1: -6, z0: -29.5, z1: -22.5 };                           // łata podłogowa w E (wlot zsypu) – duża, żeby gracz wskakujący w otwór był wypychany na łatę, nie w pustkę
 const MC_Y = H - 0.2;                                                         // spód łaty MC (cienka płyta tuż pod sufitem: kostka rzucona w górę nie dosięgnie płaszczyzny portalu)
 
 export default {
   name: 'Odwrócone drzwi',
-  hint: 'Jedne drzwi otwiera to samo, co drugie zamyka, a kostka potrafi przytrzymać przycisk za Ciebie. Gdy do przycisku nie da się podejść, spójrz w górę.',
+  hint: 'Jedne drzwi otwiera to samo, co drugie zamyka, a kostka potrafi przytrzymać przycisk za Ciebie.',
   spawn: { x: 0, y: 0, z: 24, yaw: 0 },
   exit: { x: 3.5, y: 0, z: -36 },
   build(L) {
@@ -50,13 +50,16 @@ export default {
     L.floor(-16, EF.x0, EF.z0, EF.z1, 'dark');
     L.floor(EF.x1, 16, EF.z0, EF.z1, 'dark');
     L.floor(EF.x0, EF.x1, EF.z0, EF.z1, 'floor');
-    const FD = 0.25, FH = 0.95;                       // płotek z kratki wokół łaty: nie da się wejść w otwór przypadkiem
-    L.box(EF.x0 - FD, 0, EF.z0 - FD, EF.x1 + FD, FH, EF.z0, 'grate');
-    L.box(EF.x0 - FD, 0, EF.z1, EF.x1 + FD, FH, EF.z1 + FD, 'grate');
-    L.box(EF.x0 - FD, 0, EF.z0, EF.x0, FH, EF.z1, 'grate');
-    const cz = (EF.z0 + EF.z1) / 2;                   // wschodnia strona ma prześwit 1,4 m – wejście prosto w otwór
-    L.box(EF.x1, 0, EF.z0, EF.x1 + FD, FH, cz - 0.7, 'grate');
-    L.box(EF.x1, 0, cz + 0.7, EF.x1 + FD, FH, EF.z1, 'grate');
+    // Wewnętrzna ramka z kratki (h 0,95 m): portal musi się zmieścić w jej środku, więc nigdy nie stanie przy krawędzi łaty
+    // (tuż przy krawędzi wpadnięcie w otwór bywało wypychane bokiem w ciemną podłogę). Prześwit od wschodu – wejście w otwór.
+    const RI = 1.25, RT = 0.3, RH = 0.95;
+    const rx0 = EF.x0 + RI, rx1 = EF.x1 - RI, rz0 = EF.z0 + RI, rz1 = EF.z1 - RI;
+    const cz = (EF.z0 + EF.z1) / 2;
+    L.box(rx0, 0, rz0, rx1, RH, rz0 + RT, 'grate');
+    L.box(rx0, 0, rz1 - RT, rx1, RH, rz1, 'grate');
+    L.box(rx0, 0, rz0 + RT, rx0 + RT, RH, rz1 - RT, 'grate');
+    L.box(rx1 - RT, 0, rz0 + RT, rx1, RH, cz - 0.8, 'grate');
+    L.box(rx1 - RT, 0, cz + 0.8, rx1, RH, rz1 - RT, 'grate');
 
     // ---- łata na suficie nad B ----
     L.box(MC.x0, MC_Y, MC.z0, MC.x1, H, MC.z1, 'white');
@@ -105,6 +108,10 @@ export default {
     L.box(7.7, 0, 12.4, 8.1, H, 21, 'glass');
     L.box(7.7, 0, 12.0, 16, H, 12.4, 'glass');
 
+    // ---- kabina B (szklana ściana zachodnia i południowa, otwarta na północ – jak A): nie da się trafić kostką w B z daleka ----
+    L.box(7.6, 0, -9.0, 8.0, H, 0.4, 'glass');
+    L.box(7.6, 0, -9.4, 16, H, -9.0, 'glass');
+
     // ---- przyciski i kostki ----
     L.button('A', 12, 17);
     L.button('B', 12, -4, { r: 1.8 });
@@ -118,7 +125,7 @@ export default {
     L.sign('A LUB B', 'otwarte, gdy wciśnięty A albo B', 3.4, 1.1, -12, 4.2, 5.6 - PIER - 0.02, PI);
     L.sign('ANI A, ANI B', 'otwarte, gdy oba puste', 3.4, 1.1, -12, 4.2, -14.2 + PIER + 0.02, 0);
     L.sign('ANI A, ANI B', 'otwarte, gdy oba puste', 3.4, 1.1, -12, 4.2, -14.2 - PIER - 0.02, PI);
-    L.sign('B I C', 'otwarte, gdy oba wciśnięte', 3.4, 1.1, D3X, 3.9, -29.95, 0);
+    L.sign('B ORAZ C', 'otwarte, gdy oba wciśnięte', 3.4, 1.1, D3X, 3.9, -29.95, 0);
     L.sign('WYJŚCIE', null, 8, 2.2, 3.5, 4.0, -41.95, 0);
     L.sign('A', 'przycisk', 2.2, 1.1, 15.95, 2.2, 17, PI / 2);
     L.sign('B', 'przycisk', 2.2, 1.1, 15.95, 2.2, -4, PI / 2);
@@ -139,7 +146,8 @@ export default {
     T.walkTo(-12, 11, 25);
     T.walkTo(-12, 2, 10);
     T.grab(1);
-    T.walkTo(12, -0.5, 25);
+    T.walkTo(6, 1.5, 25);
+    T.walkTo(12, 1.5, 10);
     T.walkTo(12, -2.1, 5);
     T.face(0, 0); T.wait(0.6);
     T.drop(); T.wait(1.3);
@@ -147,6 +155,7 @@ export default {
     // niebieski portal na łatę MC (sufit nad B) – stąd widać ją z góry, prawie na wprost
     T.shoot(0, 12, MC_Y, -4);
     // --- 3. z powrotem do S po K1 (D1 trzyma teraz B), K1 do M ---
+    T.walkTo(12, 1.5, 5);
     T.walkTo(-12, 3, 25);
     T.walkTo(-12, 10, 10);
     T.walkTo(11, 23.2, 25);
@@ -159,8 +168,11 @@ export default {
     T.face(0, 0); T.wait(0.5);
     T.drop(); T.wait(1.0);
     // --- 4. K2 z B zdjąć: A i B puste -> D2 otwarte; K2 do E na przycisk C ---
+    T.walkTo(-8, 0, 10);
+    T.walkTo(6, 1.5, 10);
+    T.walkTo(11, 1.2, 10);
     T.grab(1);
-    T.walkTo(11, -6, 10);
+    T.walkTo(11, 1.5, 10);
     T.walkTo(-12, -6, 25);
     T.walkTo(-12, -9, 5);
     T.assert(g.doors[2].box.disabled && g.doors[3].box.disabled, 'D2 powinny być otwarte');
@@ -179,10 +191,10 @@ export default {
     // --- 6. pomarańczowy portal na łatę EF (strzał ponad płotkiem, z bliska) i wrzucenie K1: spada z sufitu na B ---
     T.walkTo(-4.6, -21, 25);
     T.walkTo(-4.6, -26, 10);
-    T.shoot(1, -9, 0, -26);
+    T.walkTo(-7.0, -26, 10);
+    T.shoot(1, -9.5, 0, -26);
     const o = T.portal(1).pos;
-    T.walkTo(-3.8, o[2], 10);
-    T.walkTo(o[0] + 1.8, o[2], 10);
+    T.creep(o[0] + 2.2, o[2]);
     T.face(W, 0); T.wait(0.6);
     T.drop(); T.wait(2.0);
     T.assert(T.buttonPressed('B') && T.buttonPressed('C'), 'B i C powinny być wciśnięte');

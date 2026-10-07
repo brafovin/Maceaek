@@ -4,8 +4,8 @@
 //     POKÓJ 4 | POKÓJ 3        (z < 0)
 //     --------+--------
 //     POKÓJ 1 | POKÓJ 2        (z > 0)      start w pokoju 1, wyjście w szklanej celi w pokoju 4.
-// W ścianach działowych są okna: dolna część (do 10,5 m) to SZKŁO – widać, ale nie da się strzelić;
-// górna (10,5–13,7 m) to KRATKA – strzał przelatuje. Z podłogi (nawet ze skoku) nie da się zajrzeć
+// W ścianach działowych są okna: dolna część (do 12 m) to SZKŁO – widać, ale nie da się strzelić;
+// górna (12–13,7 m) to KRATKA – strzał przelatuje. Z podłogi (nawet ze skoku) nie da się zajrzeć
 // przez kratki, więc żadna portalowalna łata w sąsiednim pokoju nie jest osiągalna – ale portal
 // „widzi oczami bliźniaka”, a strzał przez portal leci stamtąd. Wysoka łata na ścianie naprzeciw okna
 // = punkt widzenia ponad podłogą. Cała reszta to ciemny beton; celę wyjścia zamyka szkło i kratkowy dach.
@@ -27,10 +27,12 @@
 //  5. Przez niebieski: pomarańczowy patrzy na zachód przez kratkę → Z4a → łata na suficie Z4b
 //     → z sufitu, przez kratkowy dach celi, w podłogową łatę p_c.
 //  6. Wejść w niebieski, zejść z otworu w podłodze celi i stanąć na zielonym polu.
-// Wokół wysokich łat-punktów widzenia stoją klatki z kratki (patrz build) – blokują „łańcuch lotów”.
+// Wokół wysokich łat-punktów widzenia stoją szyby z kratki z kolumną fizzlera (patrz build): wylot z wysokiej łaty kasuje
+// portale (i jeszcze raz po 0,6 s, bo z szybu nie da się wyjść bokiem), więc nie da się „przeskakiwać” z łaty na łatę
+// strzałami w locie – każdy skok wymaga teleskopu z podłogi.
 export default {
   name: 'Okno na świat',
-  hint: 'Kratki są za wysoko, żeby zajrzeć przez nie z podłogi, a szkło zatrzymuje każdy strzał. Co zobaczyłby ktoś, kto stoi tam, gdzie Ty nie sięgniesz?',
+  hint: 'Okna są wyżej, niż sięga Twój wzrok, nawet ze skoku. Co zobaczyłby ktoś, kto stoi tam, gdzie Ty nie sięgniesz?',
   spawn: { x: -6, y: 0, z: 20, yaw: 0 },
   exit: { x: -3.5, y: 0, z: -5 },
   build(L) {
@@ -93,9 +95,10 @@ export default {
     P(-11, 14.9, -8, -3, 16, -4);                  // Z4b – na suficie nad celą (długa wzdłuż x: łatwiej trafić z daleka)
     P(-23, 0, -12, -22, 3, -6);                    // E4 – niska
 
-    // Klatki z kratki (strzał i wzrok przechodzą, ciało nie) przed wysokimi łatami-punktami widzenia: wylot z portalu
-    // spada pionowo w dół, więc nie da się „wylecieć” i strzelać w locie z wysokiego oka (to by ominęło teleskop).
-    // Dół klatki jest otwarty – gracz wypada na podłogę. Z4b (sufit) i p_c (podłoga) zostają otwarte.
+    // Szyby z kratki (strzał i wzrok przechodzą, ciało nie) przed wysokimi łatami-punktami widzenia: wylot z portalu
+    // spada pionowo w dół, a w szybie stoi fizzler (y 4,5–12,6), który kasuje portale zaraz po wylocie i jeszcze raz po 0,6 s.
+    // Wysokie oko jest więc tylko chwilę (< 0,25 s, ponad szkłem okna), a portale z tego czasu i tak znikają, nim gracz do nich dojdzie.
+    // Dół szybu jest otwarty – gracz wypada na podłogę. Z4b (sufit) i p_c (podłoga) zostają otwarte.
     const FB = 4.5, FT = 12.6;                      // kolumna fizzlera w szybach: y od 4,5 do 12,6
     const cage = (ax, fc, dir, a0, a1, y0, y1) => {
       const D = 1.15, Tk = 0.3;

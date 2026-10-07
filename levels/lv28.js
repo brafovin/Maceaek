@@ -132,9 +132,9 @@ export default {
     L.sign('II', 'za murem', 2.6, 1.3, -9, 8.5, -11.95, 0);
     L.sign('III', 'za drzwiami', 3.2, 1.3, 14, 8.5, -47.95, 0);
     L.sign('A', 'przycisk', 2.4, 1.3, -4.5, 3.4, Z1 - 0.05, Math.PI);
-    L.sign('C', 'przycisk', 2.4, 1.3, -7.95, 3.4, 3, -Math.PI / 2);
+    L.sign('C', 'przycisk', 2.4, 1.3, -7.95, 3.4, 3, Math.PI / 2);
     L.sign('A', 'drzwi', 2.4, 1.3, -12, 6.3, -31.95, 0);
-    L.sign('B', 'przycisk', 2.4, 1.3, X0 + 0.05, 3.4, -18, -Math.PI / 2);
+    L.sign('B', 'przycisk', 2.4, 1.3, X0 + 0.05, 3.4, -18, Math.PI / 2);
     L.sign('B + C', 'drzwi', 3.2, 1.3, 10, 6.3, -47.95, 0);
     L.sign('WYJŚCIE', 'platforma wyjścia', 5, 1.4, 6, 5.5, Z0 + 0.05, 0);
     L.sign('WYJŚCIE ↑', 'daleko na północy, za trzema murami', 9, 2.2, 13.2, 8.5, -31.95, 0);   // cel widoczny ze startu przez przerwę w B1
