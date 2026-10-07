@@ -6,9 +6,10 @@ import { DARK_ALL } from './util.js';
 //   z =  33 … 16   brzeg S (start): biała płyta na zachodniej ścianie (jedyny portal przy starcie), kostka K1
 //                  i dwie „cele” (wnętrze x 10,4…16) za szklaną ścianą: w celi 1 leży K2, w celi 2 leży K3
 //   z =  16 …  4   przepaść z kwasem (12 m), na środku kurtyna fizzlera od dna do sufitu
-//   z =   4 … -4   wyspa: filar (białe ściany N i S) oraz DWA przyciski – A i B
+//   z =   4 … -4   wyspa (x -5…8): filar (białe ściany N i S), przegroda z przejściem |z| < 1 (x 2…3) oraz DWA przyciski
+//                  za przegrodą – A i B (x = 5,5)
 //   z =  -4 … -16  przepaść z kwasem (12 m), na środku kurtyna fizzlera od dna do sufitu
-//   z = -16 … -33  brzeg N: biała płyta na zachodniej ścianie, przycisk C (na wschodzie, 10 m od drzwi i dalej)
+//   z = -16 … -33  brzeg N: biała płyta na zachodniej ścianie, przycisk C (daleko na wschodzie, x = 13)
 //   z = -33 … -45  komora z wyjściem za drzwiami (ściana działowa 2,4 m ze szklanymi oknami, 1 m przed nią
 //                  kurtyna fizzlera na całą szerokość – kostki tam nie dojdą)
 //
@@ -28,6 +29,9 @@ import { DARK_ALL } from './util.js';
 //  * ściany działowe (cele, komora) mają 2,4 m, a szyby i drzwi są dłuższe niż otwory i wchodzą w sąsiednie filary
 //    (cofnięte o 5 cm, więc niewidoczne) – bez „szwów” wypchnięcie z kostki zawsze wraca na stronę, z której przyszedł gracz;
 //  * kurtyna fizzlera przed komorą: kostka, która jej dotknie, wraca na start (nie da się podeprzeć drzwi kostką);
+//  * przegroda na wyspie: kostka wyrzucona (Q) z portalu na filarze zawsze wylatuje z dryfem od ściany filaru (min. 2,5 m/s),
+//    więc nie przejdzie przez wąską szczelinę – przyciski A i B trzeba obsłużyć osobiście, niosąc kostkę przez przejście;
+//  * przycisk C jest ≥ 5 m dalej, niż doleci kostka rzucona z brzegu S przez łącze płyta S ↔ płyta N;
 //  * wszystkie powierzchnie poza czterema białymi (płyta S, płyta N, ściany N i S filaru) są ciemne/szklane.
 // Poziom nie zależy od wysokości skoków ani od układania kostek w stos: liczy się tylko to, że wszystkie trzy kostki
 // muszą leżeć na trzech przyciskach naraz, a K3 jest dostępna dopiero po wysłaniu K2 na drugi brzeg.
@@ -42,9 +46,9 @@ export default {
 
     // podłogi (wszystkie ciemne – portale tylko na białych płytach)
     L.floor(-16, 16, 16, 33, 'dark');            // brzeg S
-    L.floor(-5, 5, -4, 4, 'dark');               // wyspa
+    L.floor(-5, 8, -4, 4, 'dark');               // wyspa (wydłużona na wschód: przyciski za przegrodą)
     L.floor(-16, 16, -45, -16, 'dark');          // brzeg N + komora
-    for (const [x0, x1, z0, z1] of [[-16, 16, 4, 16], [-16, 16, -16, -4], [-16, -5, -4, 4], [5, 16, -4, 4]]) {
+    for (const [x0, x1, z0, z1] of [[-16, 16, 4, 16], [-16, 16, -16, -4], [-16, -5, -4, 4], [8, 16, -4, 4]]) {
       L.pit(x0, x1, z0, z1);
       // „siatka” tuż nad dnem: kostka, która spadła w kwas, wraca na start
       L.fizzler(x0, -6, z0, x1, -5.6, z1);
@@ -83,17 +87,22 @@ export default {
     L.box(-16, 0, -30, -15, 3.4, -22, 'white');
     L.box(-16, 3.4, -30, -15, H, -22, 'dark');
 
+    // przegroda na wyspie (do sufitu) z wąskim przejściem |z| < 1: kostka wyrzucona z portalu na filarze zawsze ma
+    // znaczny dryf od ściany filaru, więc rzut nie doleci do przycisków – kostkę trzeba przenieść na wyspę osobiście
+    L.box(2, 0, -4, 3, H, -1.0, 'dark');
+    L.box(2, 0, 1.0, 3, H, 4, 'dark');
+
     // filar na wyspie (do sufitu, żeby nic na nim nie zostało)
     L.box(-4.5, 0, -0.6, -1.5, 3.4, 0.6, 'white');
     L.box(-4.5, 3.4, -0.6, -1.5, H, 0.6, 'dark');
 
-    // przyciski: A i B na wyspie, C na brzegu N
-    L.button('A', 3, -1.2);
-    L.button('B', 3, 1.8);
-    L.button('C', 8, -24);
+    // przyciski: A i B na wyspie (za przegrodą), C na brzegu N (daleko na wschodzie)
+    L.button('A', 5.5, -1.8);
+    L.button('B', 5.5, 1.8);
+    L.button('C', 13, -24);
 
     // cele (wnętrze x 10,4…16): zachodnia ściana 2,4 m (x 8…10,4) wzdłuż z; cela 1 z 17,6…23,2, przegroda 23,2…26,
-    // cela 2 z 26…33; szyby z 17,6…19,4 i 26…27,8, drzwi 1 (A) z 20,8…23,2, drzwi 2 (B) z 29,2…31,6
+    // cela 2 z 26…33; szyby z 17,6…19,4 i 26…27,8, drzwi 1 (B) z 20,8…23,2, drzwi 2 (B + C) z 29,2…31,6
     const wz = (z0, z1, y0, y1, kind, inset = 0) => L.box(8 + inset, y0, z0, 10.4 - inset, y1, z1, kind);
     L.box(8, 0, 16, 18, H, 17.6, 'dark');            // północna ściana + filar przed oknem 1
     wz(19.4, 20.8, 0, H, 'dark');                    // filar między oknem a drzwiami 1
@@ -107,16 +116,16 @@ export default {
     L.door(['B', 'C'], 8 + IN, 0, 29.2 - EZ, 10.4 - IN, 4.4, 31.6 + EZ, { mode: 'all' });
 
     L.cube(-5, 0, 22);       // K1 – przy starcie
-    L.cube(13.5, 0, 18.7);   // K2 – cela 1 (drzwi A), widoczna przez okno 1
-    L.cube(13.5, 0, 26.9);   // K3 – cela 2 (drzwi B), widoczna przez okno 2
+    L.cube(13.5, 0, 18.7);   // K2 – cela 1 (drzwi B), widoczna przez okno 1
+    L.cube(13.5, 0, 26.9);   // K3 – cela 2 (drzwi B + C), widoczna przez okno 2
 
     // tablice: litery przy przyciskach (na słupkach do sufitu – żadna kostka nie utknie na górze), cele i drzwi wyjścia – bez opisów, co co otwiera
-    L.box(4.3, 0, -2.0, 4.7, H, -1.6, 'dark');
-    L.sign('A', 'przycisk', 2.6, 1.8, 4.29, 2.1, -1.8, -Math.PI / 2);
-    L.box(4.3, 0, 1.0, 4.7, H, 1.4, 'dark');
-    L.sign('B', 'przycisk', 2.6, 1.8, 4.29, 2.1, 1.2, -Math.PI / 2);
-    L.box(11.3, 0, -24.2, 11.7, H, -23.8, 'dark');
-    L.sign('C', 'przycisk', 2.6, 1.8, 11.29, 2.1, -24, -Math.PI / 2);
+    L.box(7.3, 0, -2.0, 7.7, H, -1.6, 'dark');
+    L.sign('A', 'przycisk', 2.6, 1.8, 7.29, 2.1, -1.8, -Math.PI / 2);
+    L.box(7.3, 0, 1.6, 7.7, H, 2.0, 'dark');
+    L.sign('B', 'przycisk', 2.6, 1.8, 7.29, 2.1, 1.8, -Math.PI / 2);
+    L.box(14.9, 0, -24.2, 15.3, H, -23.8, 'dark');
+    L.sign('C', 'przycisk', 2.6, 1.8, 14.89, 2.1, -24, -Math.PI / 2);
     L.sign('CELA 1', '', 3.2, 1.2, 7.99, 5.4, 22, -Math.PI / 2);
     L.sign('CELA 2', '', 3.2, 1.2, 7.99, 5.4, 30.4, -Math.PI / 2);
     // wysoka tablica nad filarem (ciemna, nad portalami) – widoczna od startu: wyjście jest na północy
@@ -139,6 +148,9 @@ export default {
       T.walkTo(x - 1.9, z);
       T.face(-Math.PI / 2, 0); T.wait(0.6); T.drop(); T.wait(1);
     };
+    // na wyspie: przejście przez szczelinę w przegrodzie (|z| < 1) na wschód i z powrotem do filaru
+    const islandEast = () => { T.walkTo(0.8, 0.9); T.walkTo(1.4, 0); T.walkTo(3.8, 0); };
+    const islandBack = (side) => { T.walkTo(3.8, 0); T.walkTo(1.4, 0); T.walkTo(0, 0); T.walkTo(-0.4, side * 2); };
     // z wyspy (portale: pomarańczowy na filarze, niebieski na płycie S) na brzeg S, do celi (zz = oś drzwi) po kostkę
     // i z powrotem na wyspę
     const fetchToIsland = (i, zz) => {
@@ -154,15 +166,17 @@ export default {
     T.shoot(0, -15, 1.4, 22);
     T.shoot(1, -3, 1.5, 0.6);
     enter(0);                                   // jesteś na wyspie z kostką
-    place(3, 1.8);
+    islandEast();
+    place(5.5, 1.8);
     T.assert(T.buttonPressed('B'), 'przycisk B niewciśnięty');
 
     // 2. K2 z celi 1 – na drugi brzeg: niebieski portal przestawiony na płytę N, kostka ląduje na C
+    islandBack(1);
     fetchToIsland(K2, 22);
-    T.walkTo(2, 2.4);
+    T.walkTo(1.4, 2.4);
     T.shoot(0, -15, 1.4, -26);
     enter(1);                                   // jesteś na brzegu N z K2
-    place(8, -24);
+    place(13, -24);
     T.assert(T.buttonPressed('C'), 'przycisk C niewciśnięty');
 
     // 3. z brzegu N z powrotem na S: pomarańczowy portal na płytę S (niebieski zostaje na płycie N)
@@ -175,11 +189,13 @@ export default {
     T.walkTo(-9, 24);
     T.shoot(0, -3, 1.5, 0.6);                   // niebieski na filar, pomarańczowy zostaje na płycie S
     enter(1);                                   // wyspa z K3
-    place(3, -1.2);
+    islandEast();
+    place(5.5, -1.8);
     T.assert(T.buttonPressed('A') && T.buttonPressed('B') && T.buttonPressed('C'), 'nie wszystkie przyciski wciśnięte');
 
     // 4. na brzeg N i do wyjścia: pomarańczowy na płytę N, wejście w niebieski (filar)
-    T.walkTo(2, 2.4);
+    islandBack(1);
+    T.walkTo(1.4, 2.4);
     T.shoot(1, -15, 1.4, -26);
     enter(0);
     T.walkTo(0, -30);

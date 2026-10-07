@@ -21,7 +21,7 @@ import { DARK_ALL } from './util.js';
 // Pozostałe powierzchnie są ciemne. Przegrody to szkło (blokuje strzał i rzut), nad szkłem w M|E kratka.
 // Wszystkie przegrody (szkło, skrzydła drzwi, szkło kabin) mają >= 0,8 m grubości: przy cienkiej ścianie upuszczenie
 // trzymanej kostki wypychało gracza przez nią na drugą stronę (obejście łamigłówki i pułapka między skrzydłami).
-// Skrzydła drzwi: 0,8 m, prześwit między nimi 0,7 m (gracz 0,6 się mieści, kostka 0,8 nie). Bramy D1, D2 i D3 mają ten sam układ (filary 2,4 m, dwa cienkie skrzydła w środku):
+// Skrzydła drzwi: 0,8 m, prześwit między nimi dokładnie 0,8 m (= szerokość kostki; gracz 0,6 się mieści; kostka na osi nie trzyma żadnego skrzydła, a przy zachodzeniu trzyma najwyżej jedno – nie da się jednej kostką przytrzymać obu skrzydeł). Bramy D1, D2 i D3 mają ten sam układ (filary 2,4 m, dwa cienkie skrzydła w środku):
 // drzwi o tej samej grubości co sąsiednie szkło dawały „szew”, po którym gracz wypchnięty ze ściany przechodził na drugą stronę.
 // Szkło zachodzi na filary i jest cofnięte o 2 cm – to samo z powodu szwu na styku brył.
 //
@@ -36,8 +36,8 @@ import { DARK_ALL } from './util.js';
 const H = 7;                // wysokość hali
 const DOOR_H = 2.3;         // wysokość drzwi – niska, żeby kostka zaklinowana w otworze nie dała się przejść górą
 const HALF = 0.75;          // połowa szerokości otworu drzwi (1,5 m)
-const PIER = 1.2;           // połowa grubości filarów (śluza): dwoje drzwi w jednym otworze, 0,7 m prześwitu między skrzydłami
-const DGAP = 0.75;          // odległość każdych drzwi od osi przegrody
+const PIER = 1.2;           // połowa grubości filarów (śluza): dwoje drzwi w jednym otworze, 0,8 m prześwitu między skrzydłami
+const DGAP = 0.8;           // odległość każdych drzwi od osi przegrody
 const LEAF = 0.4;           // połowa grubości skrzydła drzwi (0,8 m)
 const INS = 0.02;           // cofnięcie szkła względem filarów (brak z-fightingu przy zakładce)
 const GRATE_Y = 3.0;        // powyżej – kratka w przegrodzie M|E (strzał z E w łatę MC)
@@ -75,7 +75,7 @@ export default {
     L.box(MC.x0, MC_Y, MC.z0, MC.x1, H, MC.z1, 'white');
 
     // ---- przegrody: filary, nadproże, drzwi ----
-    // śluza: dwoje drzwi (te same przyciski) w odstępie 0,7 m – kostka zaklinowana w jednych nie utrzyma drugich
+    // śluza: dwoje drzwi (te same przyciski) w odstępie 0,8 m – jedna kostka nie utrzyma obu skrzydeł naraz
     const gate = (zc, dx, ids, opt, xFrom, xTo, kind = 'dark', inset = 0) => {
       const z0 = zc - PIER + inset, z1 = zc + PIER - inset;
       L.box(xFrom, 0, z0, dx - HALF, H, z1, kind);

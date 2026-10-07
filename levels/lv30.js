@@ -14,6 +14,9 @@ import { DARK_ALL } from './util.js';
 //   N  za kwasem: północna ściana z białą płytą Y (wysoko), przed nią fizzler; po zachodniej stronie
 //                 szklana „sala wyjścia” (D3 w jej wschodniej szybie)
 //
+// Płyty X i Y widać (i można w nie strzelać) tylko z półki, czyli dopiero po przejściu przez fizzler D1: przy otwartym D1
+// linię strzału z hali B w stronę X zasłania szklana ścianka tuż za drzwiami (L.box przy x = 4,4…5).
+//
 // Rozwiązanie w skrócie: K1 przez przepaść A (WA -> FA), na przycisk A; klatka: portale przez kratkę (FB, WB),
 // K2 na przycisk B -> D1 (fizzler za drzwiami czyści portale). W hali A jest tylko K1, więc D1 da się otworzyć dopiero
 // po wyciągnięciu kostki z klatki. Jest PIĘĆ kostek: K1 (hala A), K2, K4 i K5 (klatka), K3 (półka). K1 i K2 zostają
@@ -81,6 +84,8 @@ export default {
     L.box(5, 6, -26.4, 11, 26, -26, 'glass');
     L.door(['A', 'B'], 5, 0, -26.4, 11, 6, -26);
     L.fizzler(5, 0, -26.9, 11, 6, -26.6);   // strefa -27,1…-26,4 przylega do szyby i drzwi: nie da się jej ominąć bokiem
+    // szklana ścianka po zachodniej stronie przejścia (od strony półki): przy otwartym D1 zasłania płytę X przed strzałem z hali B
+    L.box(4.4, 0, -28.4, 5, 26, -26.4, 'glass');
 
     // ---- C: półka ----
     L.floor(-18, 18, -34, -26, 'dark');
