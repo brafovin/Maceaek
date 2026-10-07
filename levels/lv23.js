@@ -2,122 +2,119 @@ import { DARK_ALL } from './util.js';
 
 // Poziom 23 – „Dźwig”
 //
-// Budynek z czterech komór w rzędzie (oś z: start przy +z, wyjście przy -z). Każda następna komora ma podłogę
-// wyżej, a przegrody między nimi mają bardzo wysoko osadzone kratowe okna (strzał przelatuje, gracz nie):
-//   Hala startowa (podłoga 0 m,   dach 8,4)   – schody na podest 6 m, biała płyta; okno w stronę komory 1 (od 4 m)
-//   Komora 1      (podłoga 4 m,   dach 15,8)  – biały pas wzdłuż z; półka 8 m; okno od 13,4 m
-//   Komora 2      (podłoga 9,5 m, dach 25,1)  – biały pas wzdłuż x; półka 14,5 m; okno od 22,5 m
-//   Komora 3      (podłoga 15 m,  dach 25,8)  – biały pas wzdłuż z; za nim podest wyjścia na 19,5 m
-// Kraty okien przylegają do ściany od strony gracza (bez parapetu, na którym dałoby się stanąć), a ściana pod nimi jest
-// ciemna. Biały pas następnej komory widać dopiero z lotu: oczy wyżej niż ok. 14,6 m (pas 2) i ok. 23,7 m (pas 3).
-// Jedyne portalowalne powierzchnie to płyta w hali i trzy pasy (wąskie, 2,1 m: portal 2,3 m zmieści się tylko
-// wzdłuż pasa, a o jego kierunku decyduje kierunek strzału).
+// Trzy komory w rzędzie (oś z: start przy +z, wyjście przy -z), oddzielone przegrodami z wysokimi kratowymi oknami:
+//   Hala     (podłoga 0 m, dach 8,4)  – schody na podest 6 m, biała płyta u jego stóp; krata (4 … 8,4 m) w stronę komory 1
+//   Komora 1 (podłoga 4 m, dach 19,5) – pas 1 (2,1 × 2,9 m, mieści jeden portal) przy ścianie półki; półka 10 m z białą
+//                                       płytką (widać ją dopiero z góry); okno (14 … 19,5 m) w stronę komory 2
+//   Komora 2 (podłoga 6 m, dach 28)   – pas 2 (wąski, wzdłuż x), wąwóz o białym dnie na 1 m (widać je tylko znad krawędzi),
+//                                       podest wyjścia na 21 m
+// Jedyne portalowalne powierzchnie to płyta w hali, pas 1, płytka na półce, pas 2 i dno wąwozu.
 //
-// Energia lotu: wpadnięcie w portal z wysokości h daje wylot z pędem odpowiadającym h (+1,6 m, bo oczy przekraczają
-// płaszczyznę portalu), więc wylot na wyższej podłodze wznosi o różnicę poziomów wyżej, a dwa portale na jednym pasie
-// pozwalają „pompować” (każdy przelot +1,6 m). Granicę wyznacza dach komory: stopy najwyżej na 6,6 m w hali, 14,0 m
-// w komorze 1, 23,3 m w komorze 2 i 24,0 m w komorze 3. Hala ma niski dach, więc pętla płyta <-> pas 1 daje w komorze 1
-// tylko 12,1 m – tyle samo co skok z krawędzi podestu.
-//   Etap 1: apeks ze skoku z podestu (12,1 m) < 12,9 m (próg widoczności pasa 2) -> pompowanie na pasie 1 (dwa portale
-//           na jednym pasie) do dachu (14,0 m) i strzał w pas 2 w locie, tuż przy oknie.
-//   Etap 2: zeskok z apeksu etapu 1 daje w komorze 2 tylko ok. 21,1 m < 22,0 m (próg pasa 3) -> drugi portal też na pas 2
-//           i pompowanie do dachu (23,3 m), strzał w pas 3 w locie przy oknie 2.
-//   Etap 3: półka 2 -> rozbieg i zeskok w pas 2 -> wylot z pasa 3 -> lot nad komorą 3 na podest wyjścia.
-//
-// Rozwiązanie: schody -> podest 6 m: pas 1 (przez kratę) i płyta pod podestem -> wpadnij w płytę -> w locie przenieś
-// portal na północny koniec pasa 1 -> pompuj -> pod dachem, przy oknie 1: portal na pasie 2 (wzdłuż pasa) -> zeskok
-// w pas 1 -> drugi portal na pasie 2, pompuj -> pod dachem, przy oknie 2: portal na pasie 3 -> półka 2 -> zeskok
-// w pas 2 -> lot na podest wyjścia.
-const FLOOR = [0, 4, 9.5, 15];
-const CAPS = [8.4, 10.0, 13.8, 9.0];  // dach = podłoga + CAP + 1,8 (stopy najwyżej: podłoga + CAP; w hali dach = CAP[0])
-const W1 = 13.4, W2 = 22.5;   // dolne krawędzie okien 1 i 2 (kraty zaczynają się bardzo wysoko ponad półką)
-const S1 = 8.0, S2 = 14.5;    // półki przy oknach (poniżej podłogi następnej komory)
-const EXIT_Y = 19.5;
+// ENERGIA (zgodnie z regułami silnika): wlot w portal podłogowy przy spadku z wysokości h nad jego płaszczyzną daje
+// wylot z pędem odpowiadającym h, a wylot wyżej niż wlot dokłada różnicę poziomów Δ. Bonus ≈ 1,6 m przy wylocie z podłogi
+// przysługuje raz między kontaktami z ziemią; para portali na TYM SAMYM poziomie nie pompuje (sprawdzone testem),
+// pompuje tylko para o różnych poziomach – i tę gracz musi świadomie ustawić. Sufit komory ogranicza wysokość lotu.
+//   Etap 1 (hala -> komora 1): zeskok z podestu 6 m w płytę, wylot z pasa 1 (4 m): apeks ≈ 11,4 m – akurat tyle, by
+//          wylądować na półce 10 m (z niższych stopni schodów się nie uda).
+//   Etap 2 (komora 1): z półki: pomarańczowy na płytkę półki (wylot wyżej), niebieski na pas 1 u stóp półki (wlot niżej,
+//          Δ = 6 m) -> zeskok daje apeks ≈ 17,4 m (sufit ścina do 17,7). Okno odsłania pas 2 dopiero od stóp ≈ 15 m i to
+//          tuż przy kracie; po zeskoku z podestu (najwyżej ≈ 13 m) tego nie widać. W apeksie pomarańczowy leci na pas 2 –
+//          musi tam leżeć wzdłuż x, więc strzał ma iść ukośnie (dominująca składowa x), inaczej „za mało miejsca”.
+//   Etap 3 (komora 2): pas 2 jest tylko 2 m wyżej niż pas 1, więc nawet bez lądowania (cały pęd zachowany) wylot daje
+//          ≤ 19,7 m < podest wyjścia 21 m. Trzeba znów zrobić różnicę poziomów: niebieski na dno wąwozu (widoczne tylko
+//          znad krawędzi, 5 m niżej niż pas 2) – każdy zeskok do wąwozu dokłada 5 m; 1-3 obiegi i lot na podest.
+// Brak ślepych zaułków: z komory 1 wraca się wejściem w pomarańczowy portal (jeśli niebieski został w hali), z wąwozu
+// wychodzą schody, z półki można zeskoczyć.
 const X0 = -12, X1 = 8;
+const F1 = 4, F2 = 6;            // podłogi komór 1 i 2
+const PODIUM = 6, LEDGE = 10;    // podest w hali i półka w komorze 1
+const R0 = 8.4, R1 = 19.5, R2 = 28;
+const W1 = 14;                   // dolna krawędź okna między komorami 1 i 2
+const CAN = 1;                   // dno wąwozu w komorze 2
+const EXH = 21;                  // podest wyjścia
 
 export default {
   name: 'Dźwig',
-  hint: 'Okna są osadzone wysoko – co leży za nimi, zobaczysz tylko z lotu. Wysokość lotu ogranicza dopiero dach, a portal możesz przestawić, nim spadniesz.',
+  hint: 'Wysokie okna odsłaniają to, co za nimi, dopiero z lotu. Portal można przestawić, zanim się spadnie.',
   spawn: { x: 3, y: 0, z: 19, yaw: 0 },
-  exit: { x: -2, y: EXIT_Y, z: -33 },
+  exit: { x: 0, y: EXH, z: -23.5 },
   build(L) {
-    const R1 = FLOOR[1] + CAPS[1] + 1.8, R2 = FLOOR[2] + CAPS[2] + 1.8, R3 = FLOOR[3] + CAPS[3] + 1.8;
-    const R0 = CAPS[0];
-    L.room(X0, X1, -36, 24, R3, DARK_ALL);
+    L.room(X0, X1, -26, 24, R2, DARK_ALL);
 
-    // podłoga komory z białym pasem [lx0,lx1,lz0,lz1] zagnieżdżonym w ciemnej płycie
-    const cellFloor = (z0, z1, top, lane) => {
-      const [a, b, c, d] = lane;
-      L.box(X0, -8, z0, a, top, z1, 'dark');
-      L.box(b, -8, z0, X1, top, z1, 'dark');
-      L.box(a, -8, z0, b, top, c, 'dark');
-      L.box(a, -8, d, b, top, z1, 'dark');
-      L.box(a, -8, c, b, top, d, 'floor');
-    };
-    // przegroda [z0,z1] z kratowym oknem [winLo,winHi] (krata 0,3 m w środku grubości)
-    const wall = (z0, z1, winLo, winHi, top, g0 = (z0 + z1) / 2 - 0.15, g1 = (z0 + z1) / 2 + 0.15) => {
-      L.box(X0, -8, z0, X1, winLo, z1, 'dark');
-      L.box(X0, winHi, z0, X1, top, z1, 'dark');
-      L.box(X0, winLo, g0, X1, winHi, g1, 'grate');
+    // podłoga: ciemna wszędzie poza prostokątami `pads` ({x0,x1,z0,z1,top?}) – te są białe; `hole` = tylko wycięcie
+    const slab = (x0, x1, z0, z1, top, pads = []) => {
+      const zs = [z0, z1];
+      for (const p of pads) zs.push(p.z0, p.z1);
+      const br = [...new Set(zs)].sort((a, b) => a - b);
+      for (let i = 0; i + 1 < br.length; i++) {
+        const za = br[i], zb = br[i + 1];
+        const cov = pads.filter(p => p.z0 <= za + 1e-6 && p.z1 >= zb - 1e-6).sort((a, b) => a.x0 - b.x0);
+        let cx = x0;
+        for (const p of cov) {
+          if (p.x0 > cx + 1e-6) L.box(cx, -8, za, p.x0, top, zb, 'dark');
+          cx = p.x1;
+        }
+        if (cx < x1 - 1e-6) L.box(cx, -8, za, x1, top, zb, 'dark');
+      }
+      for (const p of pads) if (!p.hole) L.box(p.x0, -8, p.z0, p.x1, p.top ?? top, p.z1, 'floor');
     };
 
-    // ---- hala startowa ----
-    cellFloor(8, 24, 0, [-7.5, -1, 9.5, 16]);
+    // ---- hala: podest 6 m (schody po zachodniej stronie), płyta u jego stóp, krata w stronę komory 1 ----
+    slab(X0, X1, 8, 24, 0, [{ x0: -7.5, x1: -1, z0: 9.5, z1: 16 }]);
+    L.box(-12, 0, 8, -7.5, PODIUM, 12.5, 'dark');
     for (let i = 1; i <= 11; i++) L.box(-12, 0, 12.5 + 0.8 * (11 - i), -7.5, 0.5 * i, 12.5 + 0.8 * (12 - i), 'dark');
-    L.box(-12, 0, 8, -7.5, 6, 12.5, 'dark');                       // podest 6 m
-    L.box(X0, R0, 8, X1, R0 + 1, 24, 'dark');                       // dach hali
-    wall(7, 8, FLOOR[1], R0, R1, 7.7, 8);   // krata przy samej hali – bez wąskiego „balkonu”
+    L.box(X0, R0, 8, X1, R0 + 1, 24, 'dark');
+    L.box(X0, -8, 7, X1, F1, 8, 'dark');
+    L.box(X0, R0, 7, X1, R2, 8, 'dark');
+    L.box(X0, F1, 7.7, X1, R0, 8, 'grate');
 
-    // ---- komora 1 (półka 1: z -7 … -5,4 na S1) ----
-    cellFloor(-5.4, 7, FLOOR[1], [-10.5, -8.4, -4.5, 1.8]);
+    // ---- komora 1: pas 1 przylega do ściany półki (zeskok z półki od razu nad portalem) ----
+    slab(X0, X1, -3.6, 7, F1, [{ x0: -10.5, x1: -8.4, z0: -3.6, z1: -0.7 }]);
+    slab(X0, X1, -7, -3.6, LEDGE, [{ x0: -10.5, x1: -8.4, z0: -6.9, z1: -4.0 }]);
     L.box(X0, R1, -7, X1, R1 + 1, 7, 'dark');
-    L.box(X0, -8, -8, X1, W1, -7, 'dark');                          // przegroda (ściana pod oknem 1, bez parapetu)
-    L.box(X0, -8, -7, X1, S1, -5.4, 'dark');                        // półka 1
-    L.box(X0, R1, -8, X1, R2, -7, 'dark');                          // nad oknem
-    L.box(X0, W1, -7.3, X1, R1, -7, 'grate');                       // okno 1 (W1 … dach), krata równo z powierzchnią ściany
 
-    // ---- komora 2 (półka 2: z -17 … -15,9 na S2) ----
-    cellFloor(-15.9, -8, FLOOR[2], [-9, 7, -13.05, -10.95]);
-    L.box(X0, R2, -17, X1, R2 + 1, -8, 'dark');
-    L.box(X0, -8, -18, X1, W2, -17, 'dark');                        // przegroda (ściana pod oknem 2, bez parapetu)
-    L.box(X0, -8, -17, X1, S2, -15.9, 'dark');                      // półka 2
-    L.box(X0, R2, -18, X1, R3, -17, 'dark');
-    L.box(X0, W2, -17.3, X1, R2, -17, 'grate');                     // okno 2 (W2 … dach), krata równo z powierzchnią ściany
+    // ---- przegroda z oknem (krata przy samej ścianie od strony komory 1) ----
+    L.box(X0, -8, -8, X1, W1, -7, 'dark');
+    L.box(X0, R1, -8, X1, R2, -7, 'dark');
+    L.box(X0, W1, -7.3, X1, R1, -7, 'grate');
 
-    // ---- komora 3 + podest wyjścia ----
-    cellFloor(-36, -18, FLOOR[3], [0.1, 2.2, -27, -20.5]);
-    L.box(X0, FLOOR[3], -36, X1, EXIT_Y, -30, 'dark');
-    L.box(X0, R3 - 0.12, -36, X1, R3, -18, 'dark');                 // przykrywa lampy: przez kratę wyglądałyby jak białe płytki
+    // ---- komora 2: pas 2, wąwóz (dno 5 m niżej, schody na wschodnim końcu), podest wyjścia ----
+    const cz0 = -18.6, cz1 = -15.2;
+    slab(X0, X1, -21, -8, F2, [
+      { x0: -9, x1: 6, z0: -13.9, z1: -11.8 },
+      { x0: -9, x1: 2, z0: cz0, z1: cz1, top: CAN },
+      { x0: 2, x1: 6, z0: cz0, z1: cz1, hole: true },
+    ]);
+    for (let i = 1; i <= 10; i++) L.box(2 + 0.4 * (i - 1), -8, cz0, 6, CAN + 0.5 * i, cz1, 'dark');
+    L.box(X0, -8, -26, X1, EXH, -21, 'dark');
 
     // ---- tablice ----
-    L.sign('DŹWIG', 'wyjście: 19,5 m nad podłogą', 7.5, 1.8, -3, 2.1, 8.02, 0);
-    L.sign('WYJŚCIE ▲', '15,5 m wyżej', 6, 1.6, -3, 7.2, -5.38, 0);
-    L.sign('WYJŚCIE ▲', '10 m wyżej', 6, 1.6, -3, 12.4, -15.88, 0);
-    L.sign('WYJŚCIE ▲', 'jeszcze 4,5 m w górę', 6, 1.6, -3, 17.4, -29.98, 0);
-    L.sign('PODŁOGA 0', 'start', 3.4, 1.2, X0 + 0.02, 2.6, 22.6, -Math.PI / 2);
-    L.sign('PIĘTRO 1', '4 m', 3.4, 1.2, X0 + 0.02, FLOOR[1] + 2.4, 0, -Math.PI / 2);
-    L.sign('PIĘTRO 2', '9,5 m', 3.4, 1.2, X0 + 0.02, FLOOR[2] + 2.4, -12, -Math.PI / 2);
-    L.sign('PIĘTRO 3', '15 m', 3.4, 1.2, X0 + 0.02, FLOOR[3] + 2.4, -25, -Math.PI / 2);
+    L.sign('DŹWIG', 'wyjście: 21 m nad podłogą', 7.5, 1.8, -3, 2.1, 8.02, 0);
+    L.sign('PODEST 6 m', 'schody po zachodniej stronie', 6, 1.5, X0 + 0.02, 6.4, 17, Math.PI / 2);
+    L.sign('PORTAL LEŻY WZDŁUŻ STRZAŁU', 'na podłodze oś portalu = kierunek, w którym patrzysz', 11, 1.8, X1 - 0.02, 2.6, 16, -Math.PI / 2);
+    L.sign('PÓŁKA', '6 m nad podłogą komory', 5, 1.4, -2, 7.2, -3.58, 0);
+    L.sign('WYJŚCIE ▲', 'jeszcze 17 m w górę', 6, 1.5, -2, 12.4, -6.98, 0);
+    L.sign('WYJŚCIE ▲', 'tu na górze, 15 m nad podłogą komory', 7.5, 1.5, 0, 17, -20.98, 0);
   },
   solve(T) {
     const g = T.game, pl = g.player;
-    // sterowanie poziome (na ziemi i w powietrzu): dojdź/doleć do (tx,tz) z ograniczeniem prędkości
-    const steer = (tx, tz, vmax = 6, nobrake = false) => {
-      const dx = tx - pl.pos.x, dz = tz - pl.pos.z, d = Math.hypot(dx, dz);
-      if (d < 0.05) { g.keys.KeyW = g.keys.KeyS = g.keys.ShiftLeft = false; return d; }
-      pl.yaw = Math.atan2(-dx, -dz);
-      const want = Math.min(vmax, d * 3);
-      const cur = (pl.vel.x * dx + pl.vel.z * dz) / d;
-      g.keys.KeyW = cur < want - 0.3; g.keys.KeyS = !nobrake && cur > want + 0.3;
+    // sterowanie poziome w układzie świata (yaw = 0: W = północ, A/D = zachód/wschód): doleć do (tx,tz)
+    // z prędkością ograniczoną do vmax; hamuje w osiach niezależnie, więc nie „krąży” wokół celu
+    const steer = (tx, tz, vmax = 6) => {
+      const dx = tx - pl.pos.x, dz = tz - pl.pos.z;
+      const vdx = Math.max(-vmax, Math.min(vmax, dx * 2.2)), vdz = Math.max(-vmax, Math.min(vmax, dz * 2.2));
+      pl.yaw = 0;
+      g.keys.KeyD = pl.vel.x < vdx - 0.25; g.keys.KeyA = pl.vel.x > vdx + 0.25;
+      g.keys.KeyS = pl.vel.z < vdz - 0.25; g.keys.KeyW = pl.vel.z > vdz + 0.25;
       g.keys.ShiftLeft = vmax > 6;
-      return d;
+      return Math.hypot(dx, dz);
     };
-    // wpadnij w portal i (z góry): steruj nad otwór aż do teleportacji
-    const fallInto = (i, vair = 6, vgnd = 2.5, nobrake = false) => {
-      const Q = T.portal(i);
+    // wpadnij w portal i: stań nad otworem (na ziemi powoli) aż do teleportacji
+    const fallInto = (i, vair = 6, vgnd = 1.5) => {
       const prev = pl.pos.clone();
-      for (let k = 0; k < 900; k++) {
-        steer(Q.pos[0], Q.pos[2], pl.onGround ? vgnd : vair, nobrake);
+      for (let k = 0; k < 1200; k++) {
+        const Q = T.portal(i);
+        steer(Q.pos[0], Q.pos[2], pl.onGround ? vgnd : vair);
         g.step(T.DT);
         if (pl.pos.distanceTo(prev) > 2) { T.release(); return true; }
         prev.copy(pl.pos);
@@ -125,117 +122,72 @@ export default {
       T.release();
       return false;
     };
-    // lecąc do (tx,tz), próbuj co chwilę postawić portal `i` na pasie [tx,y,tz] (z pozycji w locie);
-    // zwraca true, gdy się udało (wtedy leć dalej). `ok` – dodatkowy warunek na pozycję/wysokość.
-    const peekShoot = (i, targets, tx, tz, vmax, maxSteps, ok = () => true) => {
-      for (let k = 0; k < maxSteps; k++) {
-        steer(tx, tz, vmax);
-        g.step(T.DT);
-        if (pl.onGround) break;
-        if (k % 4 === 0 && ok()) {
-          const t = targets[(k / 4) % targets.length | 0];
-          if (T.shoot(i, t[0], t[1], t[2], { allowFail: true })) { T.release(); return true; }
-        }
-      }
-      T.release();
-      return false;
-    };
-    // wyskocz z portalu i leć (biegnij) do punktu, aż staniesz na ziemi
-    const flyTo = (tx, tz) => {
+    // leć/chodź do (tx,tz) aż do lądowania
+    const flyLand = (tx, tz, vmax = 6) => {
       for (let k = 0; k < 1500; k++) {
-        steer(tx, tz, 10);
+        steer(tx, tz, vmax);
         g.step(T.DT);
         if (pl.onGround && k > 20) break;
       }
       T.release();
       T.wait(0.4);
     };
-    // wzlot z portalu `E` (aż do apeksu): nad portalem albo – gdy `toward` – w stronę okna (z = tz)
-    const ascend = (E, tz = null) => {
-      const Q = T.portal(E);
-      for (let k = 0; k < 900 && pl.vel.y > 0; k++) {
-        if (tz !== null) steer(Q.pos[0], tz, 10); else steer(Q.pos[0], Q.pos[2], 3);
-        g.step(T.DT);
-      }
-    };
 
-    // ---- 1. hala: podest 6 m; pas komory 1 widać przez kratę, płytę pod sobą ----
+    // ---- hala: podest 6 m, wejście na płycie, wyjście na pasie komory 1 (widać go przez kratę) ----
     T.walkTo(-10, 22.5, 12);
     T.walkTo(-10, 10.5, 25);
-    T.walkTo(-7.8, 10.5, 5); T.wait(0.5);
-    T.shoot(1, -9.45, 4, 0.5);                    // pas 1, jego południowa część (strzał wzdłuż pasa)
-    T.shoot(0, -4.6, 0, 11.5);                    // płyta tuż pod podestem
-    T.assert(fallInto(0), 'nie wpadłem w portal pod podestem');
+    T.walkTo(-7.7, 10.4, 5); T.wait(0.4);         // przy samej krawędzi, inaczej podest zasłania płytę
+    T.shoot(1, -9.45, F1, -2.3);                  // pas 1 – wzdłuż z (strzał na północ)
+    T.shoot(0, -6.2, 0, 10.8);                    // płyta tuż przy podeście
+    T.assert(fallInto(0, 3, 1.5), 'nie wpadłem w portal na płycie');
 
-    // ---- 2. komora 1: sam zeskok z podestu (apeks 12,1 m) nie wystarcza, by zajrzeć w okno 1 – pompowanie na pasie 1 ----
-    // w locie przenieś niebieski portal z płyty na północny koniec pasa 1 (ten sam kierunek co pomarańczowy)
-    let placed = false;
-    for (const z of [-3.6, -3.3, -3.9, -3.5]) if (!placed) placed = T.shoot(0, -9.45, 4, z, { allowFail: true });
-    T.assert(placed, 'nie postawiłem drugiego portalu na pasie 1');
-    T.assert(Math.abs(T.portal(0).up[2]) > 0.9 && Math.abs(T.portal(1).up[2]) > 0.9, 'pas 1 wymaga portali wzdłuż z');
-    const lane2 = [[4.5, 9.5, -12.8], [2, 9.5, -12.6], [-3, 9.5, -12.8], [6, 9.5, -12.7]];
-    let E = 1;                                   // portal, z którego właśnie wyleciałeś
-    let seen2 = false;
-    for (let pass = 0; pass < 12 && !seen2; pass++) {
-      const north = T.portal(0).pos[2] < T.portal(1).pos[2] ? 0 : 1;
-      const apex = pl.pos.y + pl.vel.y * pl.vel.y / 48;
-      if (E === north && apex > 13.7) {
-        // wzlot pod sam dach, przy oknie: pas 2 widać – strzał wzdłuż x drugim portalem
-        const Q = T.portal(E);
-        seen2 = peekShoot(1 - E, lane2, Q.pos[0], -6.4, 10, 600, () => pl.pos.z < -5.4 && pl.pos.y > 12.9);
-        T.assert(seen2, 'nie widziałem pasa 2 z apeksu: ' + JSON.stringify(T.st()));
-        break;
+    // ---- komora 1: półka 10 m (lot z podestu daje ok. 11,4 m) ----
+    flyLand(-9.45, -4.6);
+    T.assert(Math.abs(pl.pos.y - LEDGE) < 0.05, 'nie wylądowałem na półce: ' + JSON.stringify(T.st()));
+    T.creep(-9.45, -3.45); T.wait(0.3);           // przy krawędzi półki – stąd widać pas 1 u jej stóp
+    T.face(Math.PI, 0);
+    T.shoot(1, -9.45, LEDGE, -5.6);               // pomarańczowy na płytce półki (wylot wyżej)
+    T.shoot(0, -9.45, F1, -2.3);                  // niebieski na pasie u stóp półki (wlot niżej)
+    T.assert(T.portal(1).pos[1] === LEDGE && T.portal(0).pos[1] === F1, 'para portali na półce');
+    T.assert(fallInto(0, 6, 1.5), 'nie wpadłem w portal u stóp półki');
+    // lot nad półką: przy samej kracie zobacz pas komory 2 i przestaw tam pomarańczowy (ukośnie – wzdłuż pasa)
+    let seen = false;
+    for (let k = 0; k < 1500 && !seen; k++) {
+      steer(-9.45, -6.7, 6);
+      g.step(T.DT);
+      if (k % 4 === 0 && pl.pos.y > 15.2 && pl.pos.z < -6.3) seen = T.shoot(1, 0, F2, -12.8, { allowFail: true });
+      if (pl.onGround && k > 20) break;
+    }
+    T.release();
+    T.assert(seen, 'nie zobaczyłem pasa komory 2: ' + JSON.stringify(T.st()));
+    T.assert(Math.abs(T.portal(1).up[0]) > 0.9, 'pas 2 wymaga portalu ułożonego wzdłuż x');
+    flyLand(-9.45, -5.0);
+    T.creep(-9.45, -3.45); T.wait(0.3);
+    T.assert(Math.abs(pl.pos.y - LEDGE) < 0.05, 'nie wróciłem na półkę: ' + JSON.stringify(T.st()));
+    T.assert(fallInto(0, 6, 1.5), 'nie wpadłem w portal u stóp półki (2)');
+
+    // ---- komora 2: wąwóz jako druga „winda” ----
+    flyLand(0.5, -14.6);
+    T.creep(0, -14.95); T.wait(0.3);              // przy krawędzi – stąd widać dno wąwozu
+    T.face(0, 0);
+    T.shoot(0, 0, CAN, -16.6);                    // niebieski na dnie wąwozu (wlot 5 m niżej niż wylot)
+    T.assert(Math.abs(T.portal(0).up[2]) > 0.9, 'wąwóz: portal ułożony wzdłuż z');
+    T.assert(fallInto(0, 6, 1.5), 'nie wpadłem w wąwóz');
+    for (let pass = 0; pass < 8; pass++) {
+      const X = T.portal(0);
+      let apexOk = false;
+      for (let k = 0; k < 1500 && pl.vel.y > 0; k++) {
+        apexOk = pl.pos.y + pl.vel.y * pl.vel.y / 48 >= EXH + 2.2;
+        if (apexOk) break;
+        steer(X.pos[0], X.pos[2], 6);
+        g.step(T.DT);
       }
-      ascend(E);
-      T.assert(fallInto(E, 3), 'pompowanie na pasie 1: nie wpadłem w portal');
-      E = 1 - E;
+      if (apexOk) break;
+      T.assert(fallInto(0, 6, 1.5), 'pompowanie w wąwozie: nie wpadłem w portal');
     }
-    T.assert(seen2, 'pompowanie na pasie 1 nie dało apeksu przy oknie');
-    T.assert(Math.abs(T.portal(1 - E).up[0]) > 0.9, 'pas 2 wymaga portalu ustawionego wzdłuż x');
-    // zeskok wprost z apeksu (ok. 10 m) w portal na pasie 1: wylot z pasa 2 na ok. 21 m – wciąż za nisko na okno 2
-    T.assert(fallInto(E, 6, 5), 'nie wpadłem w portal na pasie 1 z apeksu');
-
-    // ---- 3. komora 2: drugi portal na pasie 2 i pompowanie aż pod sam dach ----
-    const lane3 = [[1.1, 15, -26.3], [1.15, 15, -26.1], [1.05, 15, -26.4]];
-    E = 1 - E;                                   // wyleciałeś z portalu na pasie 2
-    {
-      const A = T.portal(E);
-      const dx = A.pos[0] - 3.8 < -7.6 ? 3.8 : -3.8;
-      T.shoot(1 - E, A.pos[0] + dx, 9.5, A.pos[2]);                           // drugi portal na pasie 2, z góry (wzdłuż pasa)
-    }
-    T.assert(Math.abs(T.portal(0).up[0]) > 0.9 && Math.abs(T.portal(1).up[0]) > 0.9, 'pas 2 wymaga portali ustawionych wzdłuż x');
-    let done = false;
-    for (let pass = 0; pass < 14 && !done; pass++) {
-      const apex = pl.pos.y + pl.vel.y * pl.vel.y / 48;
-      if (apex > 23.1) {
-        // wzlot pod sam dach, przy oknie 2: pas 3 widać – strzał wzdłuż z drugim portalem
-        const Q = T.portal(E);
-        ascend(E, -16.5);
-        for (let k = 0; k < 120 && !done; k++) {
-          steer(Q.pos[0], -16.5, 10); g.step(T.DT);
-          if (k % 4 === 0 && pl.pos.y > 22.1) {
-            const t = lane3[(k / 4) % lane3.length | 0];
-            if (T.shoot(1 - E, t[0], t[1], t[2], { allowFail: true })) done = true;
-          }
-        }
-        T.release();
-        T.assert(done, 'nie widziałem pasa 3 z apeksu: ' + JSON.stringify(T.st()));
-        T.assert(Math.abs(T.portal(1 - E).up[2]) > 0.9, 'pas 3 wymaga portalu ustawionego wzdłuż z');
-        break;
-      }
-      ascend(E);
-      T.assert(fallInto(E, 3), 'pompowanie na pasie 2: nie wpadłem w portal');
-      E = 1 - E;
-    }
-    T.assert(done, 'pompowanie nie dało apeksu przy oknie 2');
-    flyTo(T.portal(E).pos[0], -16.2);            // półka 2 przy oknie
-    T.assert(Math.abs(pl.pos.y - S2) < 0.05, 'nie wylądowałem na półce 2: ' + JSON.stringify(T.st()));
-    T.walkTo(pl.pos.x, -16.8, 5); T.wait(0.3);   // rozbieg po półce: krawędź jest 2,3 m od pasa, spadek trwa ok. 0,65 s
-    T.assert(fallInto(E, 6, 6, true), 'nie zeskoczyłem w portal na pasie 2');
-
-    // ---- 4. lot nad komorą 3: na podest wyjścia ----
-    flyTo(-2, -33);
-    T.walkTo(-2, -33, 8);
+    // ---- lot na podest wyjścia ----
+    flyLand(0, -23.5, 10);
+    T.walkTo(0, -23.5, 4);
     T.wait(0.3);
   },
 };

@@ -14,7 +14,9 @@
 // Z3a (pokój 3, północ, przy rogu), Z3b (pokój 3, wschód), Z4a (pokój 4, zachód), Z4b (sufit nad celą),
 // p_c (podłoga celi). Niskie łaty (wejścia): E1..E4 + trzy atrapy w pokoju 1 (D1, D2, D3).
 // Graf widoczności (łata → łaty widoczne z jej oczu, sprawdzone skryptem):
-//   V → Z2a → Z2b → Z3a → (E3)      Z3b → Z4a → Z4b → p_c        (Z3b jest niewidoczne z Z3a i z E3 – filary)
+//   V → Z2a → Z2b → Z3a              Z3b → Z4a → Z4b → p_c        (Z3b jest niewidoczne z Z3a i z E3, a E3 z Z3a – filary i słup)
+// (graf sprawdzony skryptem z górnym ograniczeniem: apertura = cały prostokąt łaty, cel = cały prostokąt łaty; krawędź E3 → Z3b
+//  istnieje dopiero przy filarze 2 krótszym niż do z = -16)
 //
 // Zamierzone rozwiązanie („teleskop”: niebieski portal przy podłodze patrzy oczami pomarańczowego,
 // który wędruje coraz dalej – gracz się nie rusza z pokoju 1):
@@ -128,9 +130,13 @@ export default {
     cage('z', -22, 1, 12.5, 15.5, 11.1, 13.5, 1.15);  // Z3a (płytszy: głęboki szyb odsłaniałby z tego miejsca łatę Z4a przez okno)
 
     // filary w pokoju 3: pierwszy zasłania Z3b przed wzrokiem z Z3a, drugi – przed wzrokiem z niskiej łaty E3
-    // (z podłogi pokoju 3 łata Z3b jest widoczna)
+    // (z podłogi pokoju 3 łata Z3b jest widoczna). Filar 2 musi sięgać aż do z = -16: pas z = -12…-18,5 między E3 a Z3b
+    // ma być całkowicie zasłonięty (promień zza narożnika filaru, przez skrajną część owalu portalu na E3, inaczej trafiałby
+    // w Z3b i omijał cały pokój 3). Słup 3 chowa E3 przed Z3a (bez niego dałoby się z Z3a przestawić pomarańczowy na E3 i wejść
+    // „niskim wejściem” z pokoju 1 bez spadania do pokoju 3). Pas z = -19…-15 między Z3b a oknem W34 zostaje wolny.
     L.box(16.5, 0, -S, 19.5, H, -18.5, D);
-    L.box(7, 0, -13.5, 9.5, H, -8.5, D);
+    L.box(7, 0, -16, 9.5, H, -8.5, D);
+    L.box(3, 0, -15, 5, H, -12.5, D);
 
     // ---- tablice ----
     L.sign('POKÓJ 1', 'start', 9, 2.6, -17, 7, 22.95, Math.PI);

@@ -19,6 +19,11 @@ import { DARK_ALL } from './util.js';
 //
 // Portalowalne są tylko dwie bryły: MC (sufit nad B, widać z M przez szkło kabiny) oraz EF (podłoga E).
 // Pozostałe powierzchnie są ciemne. Przegrody to szkło (blokuje strzał i rzut), nad szkłem w M|E kratka.
+// Wszystkie przegrody (szkło, skrzydła drzwi, szkło kabin) mają >= 0,8 m grubości: przy cienkiej ścianie upuszczenie
+// trzymanej kostki wypychało gracza przez nią na drugą stronę (obejście łamigłówki i pułapka między skrzydłami).
+// Skrzydła drzwi: 0,8 m, prześwit między nimi 0,7 m (gracz 0,6 się mieści, kostka 0,8 nie). Bramy D1, D2 i D3 mają ten sam układ (filary 2,4 m, dwa cienkie skrzydła w środku):
+// drzwi o tej samej grubości co sąsiednie szkło dawały „szew”, po którym gracz wypchnięty ze ściany przechodził na drugą stronę.
+// Szkło zachodzi na filary i jest cofnięte o 2 cm – to samo z powodu szwu na styku brył.
 //
 // Przycisk B stoi w szklanej kabinie otwartej od strony S (jak A): kostki nie da się na niego rzucić z daleka – zwłaszcza od bramy D2,
 // bo wtedy wystarczyłby sprint przez D2 i cała sztuczka z zsypem byłaby zbędna. Kabina zasłania też MC przed strzałem z E.
@@ -31,8 +36,10 @@ import { DARK_ALL } from './util.js';
 const H = 7;                // wysokość hali
 const DOOR_H = 2.3;         // wysokość drzwi – niska, żeby kostka zaklinowana w otworze nie dała się przejść górą
 const HALF = 0.75;          // połowa szerokości otworu drzwi (1,5 m)
-const PIER = 1.2;           // połowa grubości filarów (śluza): dwoje drzwi w jednym otworze, 1,5 m od siebie
+const PIER = 1.2;           // połowa grubości filarów (śluza): dwoje drzwi w jednym otworze, 0,7 m prześwitu między skrzydłami
 const DGAP = 0.75;          // odległość każdych drzwi od osi przegrody
+const LEAF = 0.4;           // połowa grubości skrzydła drzwi (0,8 m)
+const INS = 0.02;           // cofnięcie szkła względem filarów (brak z-fightingu przy zakładce)
 const GRATE_Y = 3.0;        // powyżej – kratka w przegrodzie M|E (strzał z E w łatę MC)
 
 const MC = { x0: 10.8, x1: 13.2, z0: -5.2, z1: -2.8 };                      // łata sufitowa nad B
@@ -68,30 +75,28 @@ export default {
     L.box(MC.x0, MC_Y, MC.z0, MC.x1, H, MC.z1, 'white');
 
     // ---- przegrody: filary, nadproże, drzwi ----
-    // śluza: dwoje drzwi (te same przyciski) w odstępie 1,5 m – kostka zaklinowana w jednych nie utrzyma drugich
-    const gate = (zc, dx, ids, opt, xFrom, xTo) => {
-      const z0 = zc - PIER, z1 = zc + PIER;
-      L.box(xFrom, 0, z0, dx - HALF, H, z1, 'dark');
-      L.box(dx + HALF, 0, z0, xTo, H, z1, 'dark');
-      L.box(dx - HALF, DOOR_H, z0, dx + HALF, H, z1, 'dark');
-      L.door(ids, dx - HALF, 0, zc - DGAP - 0.2, dx + HALF, DOOR_H, zc - DGAP + 0.2, opt);
-      L.door(ids, dx - HALF, 0, zc + DGAP - 0.2, dx + HALF, DOOR_H, zc + DGAP + 0.2, opt);
+    // śluza: dwoje drzwi (te same przyciski) w odstępie 0,7 m – kostka zaklinowana w jednych nie utrzyma drugich
+    const gate = (zc, dx, ids, opt, xFrom, xTo, kind = 'dark', inset = 0) => {
+      const z0 = zc - PIER + inset, z1 = zc + PIER - inset;
+      L.box(xFrom, 0, z0, dx - HALF, H, z1, kind);
+      L.box(dx + HALF, 0, z0, xTo, H, z1, kind);
+      L.box(dx - HALF, DOOR_H, z0, dx + HALF, H, z1, kind);
+      L.door(ids, dx - HALF, 0, zc - DGAP - LEAF, dx + HALF, DOOR_H, zc - DGAP + LEAF, opt);
+      L.door(ids, dx - HALF, 0, zc + DGAP - LEAF, dx + HALF, DOOR_H, zc + DGAP + LEAF, opt);
     };
     // P1: S|M (szkło na całą wysokość)
-    gate(5.6, -12, ['A', 'B'], { mode: 'any' }, -16, -9);
-    L.box(-9, 0, 5.4, 16, H, 5.8, 'glass');
+    // Szkło zachodzi na filary o 1 m (i jest cofnięte o 2 cm), bo na styku sąsiednich brył o tej samej grubości wypychanie gracza bywało „po szwie”.
+    gate(5.6, -12, ['A', 'B'], { mode: 'any' }, -16, -8);
+    L.box(-9, 0, 5.6 - PIER + INS, 16, H, 5.6 + PIER - INS, 'glass');
     // P2: M|E (szkło do GRATE_Y, wyżej kratka)
-    gate(-14.2, -12, ['A', 'B'], { mode: 'any', invert: true }, -16, -9);
-    L.box(-9, 0, -14.4, 16, GRATE_Y, -14.0, 'glass');
-    L.box(-9, GRATE_Y, -14.35, 16, H, -14.05, 'grate');
+    gate(-14.2, -12, ['A', 'B'], { mode: 'any', invert: true }, -16, -8);
+    L.box(-9, 0, -14.2 - PIER + INS, 16, GRATE_Y, -14.2 + PIER - INS, 'glass');
+    L.box(-9, GRATE_Y, -14.2 - PIER + INS, 16, H, -14.2 + PIER - INS, 'grate');
     // P3: E|X – szklana ściana z drzwiami (zielone pole widać z całej hali)
     const D3X = -4;
-    L.box(-8, 0, -30.4, D3X - HALF, H, -30.0, 'glass');
-    L.box(D3X + HALF, 0, -30.4, 8, H, -30.0, 'glass');
-    L.box(D3X - HALF, DOOR_H, -30.4, D3X + HALF, H, -30.0, 'glass');
-    L.door(['B', 'C'], D3X - HALF, 0, -30.4, D3X + HALF, DOOR_H, -30.0, { mode: 'all' });
-    L.box(-16, 0, -42, -8, H, -29.6, 'dark');
-    L.box(8, 0, -42, 16, H, -29.6, 'dark');
+    gate(-30.8, D3X, ['B', 'C'], { mode: 'all' }, -8, 8, 'glass', INS);
+    L.box(-16, 0, -42, -7, H, -29.6, 'dark');
+    L.box(7, 0, -42, 16, H, -29.6, 'dark');
 
     // ---- ramki z pasów ostrzegawczych wokół drzwi (tylko ozdoba, poza otworem) ----
     const frame = (zFace, dir, dx) => {
@@ -102,18 +107,18 @@ export default {
     };
     frame(5.6 + PIER, +1, -12); frame(5.6 - PIER, -1, -12);
     frame(-14.2 + PIER, +1, -12); frame(-14.2 - PIER, -1, -12);
-    frame(-30.0, +1, D3X); frame(-30.4, -1, D3X);
+    frame(-29.6, +1, D3X); frame(-32.0, -1, D3X);
     // cokoły przy szklanych przegrodach (żeby szkło było widoczne)
-    L.box(-9, 0, 5.6 - PIER, 16, 0.3, 5.6 + PIER, 'door');
-    L.box(-9, 0, -14.2 - PIER, 16, 0.3, -14.2 + PIER, 'door');
+    L.box(-8, 0, 5.6 - PIER, 16, 0.3, 5.6 + PIER, 'door');
+    L.box(-8, 0, -14.2 - PIER, 16, 0.3, -14.2 + PIER, 'door');
 
     // ---- kabina A (szklana ściana zachodnia i północna, otwarta na południe) ----
-    L.box(7.7, 0, 12.4, 8.1, H, 21, 'glass');
-    L.box(7.7, 0, 12.0, 16, H, 12.4, 'glass');
+    L.box(7.1, 0, 12.4, 8.1, H, 21, 'glass');
+    L.box(7.1, 0, 11.4, 16, H, 12.4, 'glass');
 
     // ---- kabina B (szklana ściana zachodnia i południowa, otwarta na północ – jak A): nie da się trafić kostką w B z daleka ----
-    L.box(7.6, 0, -9.0, 8.0, H, 0.4, 'glass');
-    L.box(7.6, 0, -9.4, 16, H, -9.0, 'glass');
+    L.box(7.0, 0, -9.0, 8.0, H, 0.4, 'glass');
+    L.box(7.0, 0, -10.0, 16, H, -9.0, 'glass');
 
     // ---- przyciski i kostki ----
     L.button('A', 12, 17);
@@ -128,7 +133,7 @@ export default {
     L.sign('A LUB B', 'otwarte, gdy wciśnięty A albo B', 3.4, 1.1, -12, 4.2, 5.6 - PIER - 0.02, PI);
     L.sign('ANI A, ANI B', 'otwarte, gdy oba puste', 3.4, 1.1, -12, 4.2, -14.2 + PIER + 0.02, 0);
     L.sign('ANI A, ANI B', 'otwarte, gdy oba puste', 3.4, 1.1, -12, 4.2, -14.2 - PIER - 0.02, PI);
-    L.sign('B ORAZ C', 'otwarte, gdy oba wciśnięte', 3.4, 1.1, D3X, 3.9, -29.95, 0);
+    L.sign('B ORAZ C', 'otwarte, gdy oba wciśnięte', 3.4, 1.1, D3X, 3.9, -29.58, 0);
     L.sign('WYJŚCIE', null, 8, 2.2, 3.5, 4.0, -41.95, 0);
     L.sign('A', 'przycisk', 2.2, 1.1, 15.95, 2.2, 17, PI / 2);
     L.sign('B', 'przycisk', 2.2, 1.1, 15.95, 2.2, -4, PI / 2);
