@@ -61,8 +61,8 @@ export default {
     L.box(rx0, 0, rz0, rx1, RH, rz0 + RT, 'grate');
     L.box(rx0, 0, rz1 - RT, rx1, RH, rz1, 'grate');
     L.box(rx0, 0, rz0 + RT, rx0 + RT, RH, rz1 - RT, 'grate');
-    L.box(rx1 - RT, 0, rz0 + RT, rx1, RH, cz - 0.8, 'grate');
-    L.box(rx1 - RT, 0, cz + 0.8, rx1, RH, rz1 - RT, 'grate');
+    L.box(rx1 - RT, 0, rz0 + RT, rx1, RH, cz - 0.5, 'grate');
+    L.box(rx1 - RT, 0, cz + 0.5, rx1, RH, rz1 - RT, 'grate');
 
     // ---- łata na suficie nad B ----
     L.box(MC.x0, MC_Y, MC.z0, MC.x1, H, MC.z1, 'white');

@@ -42,6 +42,8 @@ const PAD_E = { x0: 7, x1: 13, z0: -19, z1: -13 };      // podest w E (widać go
 const CE = { x0: 0, x1: 4, z0: -13, z1: -9.5 };         // łatka na suficie E, blisko przegrody W1
 const O1 = { x0: -12.5, x1: -9.9 };                     // otwór drzwi D1
 const O2 = { x0: 4, x1: 13 };                           // otwór kurtyny F2
+const Z1 = { x: -11.2, z: -9.6 };                       // przycisk ratunkowy w E, tuż za D1
+const W1B = { x: -11.2, z: -3.8 };                      // przycisk powrotny w A, tuż przed D1 (gdy kostka została w E)
 const Y = { x: 10, z: -28 };                            // przycisk Y
 const D2 = { x0: -1.5, x1: 1.5 };                       // drzwi wyjścia
 
@@ -67,7 +69,7 @@ export default {
     L.box(2.5, 0, -8, 13, 5, -6, 'glass');
     L.box(2.5, 5, -8, 13, H, -6, 'dark');
     L.box(13, 0, -8, 14, H, -6, 'dark');
-    L.door('X', O1.x0, 0, -7, O1.x1, LINT, -6);
+    L.door(['X', 'Z', 'W'], O1.x0, 0, -7, O1.x1, LINT, -6, { mode: 'any' });
     L.fizzler(O1.x0, 0, -7.7, O1.x1, LINT, -6.2);
 
     // ---- W2: otwór O2 z kurtyną F2; wysoka łatka H na północnej ścianie ----
@@ -93,7 +95,9 @@ export default {
     L.box(CE.x0, H - 0.5, CE.z0, CE.x1, H, CE.z1, 'white');
 
     // ---- przyciski i kostka ----
-    L.button('X', X1.x, X1.z, { r: 0.9, timer: 3 });
+    L.button('X', X1.x, X1.z, { r: 0.9 });
+    L.button('Z', Z1.x, Z1.z, { r: 0.9, timer: 4 });       // ratunkowy: otwiera D1 od strony E na 4 s
+    L.button('W', W1B.x, W1B.z, { r: 0.8, timer: 5 });      // ratunkowy: otwiera D1 od strony A na 5 s
     L.button('Y', Y.x, Y.z, { r: 1.2 });
     L.cube(X1.x, 0, X1.z);
 
@@ -123,7 +127,7 @@ export default {
     }
 
     // ---- tablice ----
-    L.sign('DRZWI TRZYMA PRZYCISK', 'zdejmij kostkę – po chwili zamkną się', 5, 1.2, (O1.x0 + O1.x1) / 2, 6.6, -5.85, 0);
+    L.sign('DRZWI TRZYMA PRZYCISK', 'zdejmij kostkę – zamkną się', 5, 1.2, (O1.x0 + O1.x1) / 2, 6.6, -5.85, 0);
     L.sign('CEL: KOSTKA NA PRZYCISKU', 'czerwony przycisk leży za dwiema kurtynami', 7, 1.4, 7.7, 7.6, -5.85, 0);
     L.sign('KURTYNA', 'zabiera portale i kostki', 4, 1, (O2.x0 + O2.x1) / 2, 6.6, -19.85, 0);
     L.sign('WYJŚCIE', 'kostka na przycisku otwiera drzwi', 5, 1.1, 0, 6.6, -33.85, 0);

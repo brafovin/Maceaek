@@ -15,21 +15,23 @@ import { DARK_ALL } from './util.js';
 //                 szklana „sala wyjścia” (D3 w jej wschodniej szybie)
 //
 // Rozwiązanie w skrócie: K1 przez przepaść A (WA -> FA), na przycisk A; klatka: portale przez kratkę (FB, WB),
-// K2 na przycisk B -> D1 (fizzler za drzwiami czyści portale). Komora potrzebuje kilku kostek (przyciski C, E, F),
-// a na półce jest tylko K3 – kolejną (K4) trzeba przenieść portalami, bo kostka dotykająca fizzlera wraca na start:
-// niebieski na X, pomarańczowy przez otwarte D1 i kratkę na łatę FB w klatce, K4 przez FB -> X na półkę.
+// K2 na przycisk B -> D1 (fizzler za drzwiami czyści portale). W hali A jest tylko K1, więc D1 da się otworzyć dopiero
+// po wyciągnięciu kostki z klatki. Są dokładnie CZTERY kostki: K1 (hala A), K2 i K4 (klatka), K3 (półka).
+// Komora potrzebuje TRZECH kostek (przyciski C, E, F), a na półce jest tylko K3 – kolejne trzeba przenieść portalami,
+// bo kostka dotykająca fizzlera wraca na start: niebieski na X (półka), pomarańczowy przez otwarte D1 i kratkę na łatę FB
+// w klatce, K4 przez FB -> X na półkę. Potem pomarańczowy przez D1 na FA i K1 (zdjęta z A – D1 się zamyka, ale portale
+// stoją) przez FA -> X na półkę. K2 zostaje na B, więc na przycisku A i B nie ma już nic do roboty.
 // Potem Y (północ, wysoko, z boku wieży) i strzał POMARAŃCZOWYM przez niebieski X: promień wylatuje z Y
 // (przed Y fizzler – wejście w Y to śmierć i utrata portali), leci nad kwasem przez kratę-okienko i stawia portal
 // na białej płycie IP w komorze wieży (innej drogi nie ma). K3 na przycisk C -> drzwi D3 otwarte; wracasz przez IP
-// po K4 (przycisk E) i po K5 (przycisk F); niebieski przez okienko i D3 na łatę FN w sali wyjścia.
-// Komora potrzebuje TRZECH kostek (C, E, F): K3 z półki, K4 z klatki i K5 – piątą kostkę, która leży w hali A
-// (przy K1). K5 przechodzi przepaść tą samą drogą co K1 (WA -> FA), a potem wraca z hali B na półkę: pomarańczowy przez
-// otwarte D1 na FA, wejście w niebieski X (wylot z FA w hali B), K5 w ręce, z powrotem przez FA -> X.
-// Kostki K1 i K2 zostają na A i B, więc D1 jest otwarte przez cały czas (po śmierci portale zostają).
-// Drzwi D4 przed polem wyjścia wymagają C, E i F (kostki muszą zostać) ORAZ czasowego T (5 s, przy zachodniej ścianie
-// komory, daleko od IP): wciśnij T i biegiem IP -> FN -> D4 -> pole wyjścia (ok. 1,6 s zużyte z 5 s).
+// po K4 (przycisk E) i po K1 (przycisk F); niebieski przez okienko i D3 na łatę FN w sali wyjścia.
+// Przyciski komory leżą daleko od siebie (C r=1,1 w (11,2;-41), E r=0,9 w (11,6;-44), F r=0,9 w (9;-42,6)), więc jedna
+// kostka naciska tylko jeden. Przycisk czasowy T (5 s) leży w WĄSKIEJ wnęce (0,75 m) przy zachodniej ścianie komory:
+// gracz (0,6 m) się mieści, kostka (0,8 m) – nie, więc T trzyma tylko gracz.
+// Drzwi D4 przed polem wyjścia wymagają C, E, F (kostki muszą zostać) ORAZ T: wciśnij T i biegiem IP -> FN -> D4 -> pole
+// wyjścia (ok. 2 s zużyte z 5 s).
 // Siatki ratunkowe (fizzlery tuż nad dnem dołów): kostka, która wpadnie w kwas, wraca na start (bez nich zostałaby
-// na dnie na stałe – silnik porównuje wysokość z progiem poniżej dna). Po śmierci portale znikają, kostki zostają.
+// na dnie na stałe – silnik porównuje wysokość z progiem poniżej dna). Po śmierci portale zostają, kostki też.
 export default {
   name: 'Finał ostateczny',
   hint: 'Wyjście widać od początku – to droga do niego jest ukryta. Zastanów się, ile ciężarów potrzeba i skąd je wziąć.',
@@ -98,10 +100,15 @@ export default {
     L.box(6, 16, -46, 12, 18, -45, 'dark');
     L.box(6, 10, -45.65, 12, 16, -45.35, 'grate');
     L.box(4, 17, -46, 14, 18, -34, 'dark');               // dach
-    L.button('C', 11.2, -41, { y: 10, r: 1.3 });
+    L.button('C', 11.2, -41, { y: 10, r: 1.1 });
     L.button('E', 11.6, -44, { y: 10, r: 0.9 });
-    L.button('F', 9.4, -42.4, { y: 10, r: 0.9 });
-    L.button('T', 6.8, -44, { y: 10, r: 0.9, timer: 5 });
+    L.button('F', 9.0, -42.6, { y: 10, r: 0.9 });
+    // T: wnęka szersza o 0,75 m na gracza (0,6 m) i za wąska na kostkę (0,8 m); przycisk głęboko w środku
+    L.box(5, 10, -45, 6.6, 11, -44.375, 'dark');
+    L.box(6.6, 10, -45, 7.3, 11, -44.75, 'dark');
+    L.box(5, 10, -43.625, 6.6, 11, -43, 'dark');
+    L.box(6.6, 10, -43.25, 7.3, 11, -43, 'dark');
+    L.button('T', 5.6, -44, { y: 10, r: 0.5, timer: 5 });
 
     // ---- północ: płyta Y wysoko na ścianie, przed nią fizzler ----
     L.box(6, 11.4, -66, 12, 15, -65, 'white');            // Y
@@ -129,17 +136,15 @@ export default {
     L.fizzler(14, -5.99, -66, 18, -5.58, -34);
     L.fizzler(4, -5.99, -66, 14, -5.58, -46);
 
-    L.cube(-4, 0, 14);                                    // K5 (piąta kostka – w hali A, indeks 4)
-
     // ---- tablice ----
     L.sign('SERCE KOMPLEKSU', 'wyjście widać – drogę trzeba znaleźć', 9, 1.6, 17.95, 4, 8, Math.PI / 2);
     L.sign('A', 'przycisk', 1.6, 1.0, -9, 5, -25.95, 0);
     L.sign('B', 'przycisk', 1.6, 1.0, 3, 5, -25.95, 0);
     L.sign('D1', 'A + B', 3, 1.0, 8, 8, -25.95, 0);
-    L.sign('C', 'przycisk', 1.6, 1.0, 12.95, 12, -41, Math.PI / 2);
-    L.sign('E', 'przycisk', 1.6, 1.0, 12.95, 12, -44, Math.PI / 2);
-    L.sign('F', 'przycisk', 1.6, 1.0, 5.05, 12, -41, -Math.PI / 2);
-    L.sign('T', 'czasowy 5 s', 2.2, 1.0, 5.05, 12, -44, -Math.PI / 2);
+    L.sign('C', 'połóż kostkę', 2.4, 1.0, 12.95, 12, -41, Math.PI / 2);
+    L.sign('E', 'połóż kostkę', 2.4, 1.0, 12.95, 12, -44, Math.PI / 2);
+    L.sign('F', 'połóż kostkę', 2.4, 1.0, 5.05, 12, -41, -Math.PI / 2);
+    L.sign('T', 'tylko gracz, 5 s', 2.8, 1.0, 5.05, 12, -44, -Math.PI / 2);
     L.sign('D3', 'C', 1.6, 1.0, -0.65, 9.5, -57, Math.PI / 2);
     L.sign('D3', 'C', 1.6, 1.0, -0.55, 9.5, -57, -Math.PI / 2);
     L.sign('D4', 'C + E + F + T', 3.2, 1.0, -9.65, 7.3, -59, -Math.PI / 2);
@@ -169,14 +174,6 @@ export default {
     // 2. K1 na przycisk A
     place(-9, -19);
     T.assert(T.buttonPressed('A'), 'przycisk A niewciśnięty');
-    // 2b. K5: z powrotem przez FA do hali A (portale WA/FA stoją), kostka K5 przez przepaść i odłożona w hali B
-    T.assert(T.walkThrough(1), 'nie wróciłem przez FA do hali A');
-    T.wait(0.3);
-    T.grab(4);                                   // K5
-    T.assert(T.game.mech.held, 'K5 nie w rękach');
-    hop(0, 0);
-    place(-13, -12);
-    T.walkTo(-13, -8.5); T.walkTo(0, -8.5);        // (omiń portal FA na podłodze: północną stroną)
 
     // 3. klatka z K2: strzał przez kratkę na łatę FB, wejście od ściany WB
     T.walkTo(0, -17, 10); T.walkTo(0, -12.5, 10);                // (omiń portal FA na podłodze)
@@ -208,17 +205,18 @@ export default {
     T.face(-Math.PI / 2, 0); T.run(0.9, { KeyW: 1 }); T.land(3);
     place(-12, -32);                             // K4 czeka na półce
 
-    // 5b. K5 (czeka w hali B) na półkę: pomarańczowy przez otwarte D1 na FA, niebieski X już stoi
+    // 5b. K1 (leży na przycisku A) na półkę: pomarańczowy przez otwarte D1 na FA, niebieski X już stoi.
+    //     Zdjęcie K1 z A zamknie D1, ale portale zostają.
     T.walkTo(9, -29.5);
     T.shoot(1, -5, 0, -12.5);
     T.walkTo(-3, -31.5, 15);
     T.assert(T.walkThrough(0), 'nie wszedłem w X (FA)');
     T.face(0, 0); T.run(0.9, { KeyW: 1 }); T.land(3);   // wylot z FA w hali B
-    T.grab(4);                                   // K5
-    T.assert(T.game.mech.held, 'K5 nie w rękach (2)');
+    T.grab(0);                                   // K1
+    T.assert(T.game.mech.held, 'K1 nie w rękach (2)');
     T.assert(T.walkThrough(1), 'nie wróciłem przez FA');
     T.face(-Math.PI / 2, 0); T.run(0.9, { KeyW: 1 }); T.land(3);
-    place(-12, -29);                             // K5 czeka na półce
+    place(-12, -29);                             // K1 czeka na półce
 
     // 6. K3 w ręce; Y (pomarańczowy) wysoko na północnej ścianie – z boku wieży, by ona nie zasłaniała
     T.grab(3);                                   // K3
@@ -248,9 +246,9 @@ export default {
     };
     shuttle(2, 11.6, -42.1);
     T.assert(T.buttonPressed('E'), 'przycisk E niewciśnięty');
-    shuttle(4, 9.4, -40.5);
+    shuttle(0, 9.0, -40.7);
     T.assert(T.buttonPressed('F'), 'przycisk F niewciśnięty');
-    T.walkTo(7.4, -42.4);
+    T.walkTo(7.2, -41.5);
     // 10. niebieski przez okienko i otwarte drzwi D3 na łatę FN w sali wyjścia
     T.walkTo(9, -44.6);
     T.wait(0.3);

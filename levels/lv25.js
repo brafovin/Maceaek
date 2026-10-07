@@ -78,20 +78,20 @@ export default {
     const P = (x0, y0, z0, x1, y1, z1) => L.box(x0, y0, z0, x1, y1, z1, 'white');
     // pokój 1
     P(-2, 0, 3, -1, 3, 9);                         // E1 – niska, przy ścianie wschodniej
-    P(-23, 10.9, 14.7, -22, 14.1, 17.3);           // V  – wysoka, na ścianie zachodniej
+    P(-23, 11.1, 14.7, -22, 13.5, 17.3);           // V  – wysoka, na ścianie zachodniej
     P(-22, 0, 1, -14, 3, 2);                       // dodatkowa niska łata przy szybie
-    P(-12, 10.9, 22, -8, 14.1, 23);                // dodatkowa wysoka na ścianie południowej
-    P(-2, 10.9, 2.5, -1, 14.1, 6.5);               // dodatkowa wysoka nad E1
+    P(-12, 11.1, 22, -8, 13.5, 23);                // dodatkowa wysoka na ścianie południowej
+    P(-2, 11.1, 2.5, -1, 13.5, 6.5);               // dodatkowa wysoka nad E1
     // pokój 2
-    P(22, 10.9, 14.5, 23, 14.1, 17.5);             // Z2a
-    P(12.5, 10.9, 22, 15.5, 14.1, 23);             // Z2b
+    P(22, 11.1, 14.5, 23, 13.5, 17.5);             // Z2a
+    P(12.5, 11.1, 22, 15.5, 13.5, 23);             // Z2b
     P(3, 0, 1, 9, 3, 2);                           // E2 – niska
     // pokój 3
-    P(12.5, 10.9, -23, 15.5, 14.1, -22);           // Z3a
-    P(22, 10.9, -18.5, 23, 14.1, -15.5);           // Z3b
+    P(12.5, 11.1, -23, 15.5, 13.5, -22);           // Z3a
+    P(22, 11.1, -18.5, 23, 13.5, -15.5);           // Z3b
     P(1, 0, -12, 2, 3, -6);                        // E3 – niska
     // pokój 4
-    P(-23, 10.9, -18.5, -22, 14.1, -15.5);         // Z4a
+    P(-23, 11.1, -18.5, -22, 13.5, -15.5);         // Z4a
     P(-11, 14.9, -8, -3, 16, -4);                  // Z4b – na suficie nad celą (długa wzdłuż x: łatwiej trafić z daleka)
     P(-23, 0, -12, -22, 3, -6);                    // E4 – niska
 
@@ -116,14 +116,14 @@ export default {
       const fa = Math.min(fc, fc + dir * D), fb = Math.max(fc, fc + dir * D);
       if (ax === 'x') L.fizzler(fa, FB, a0, fb, FT, a1); else L.fizzler(a0, FB, fa, a1, FT, fb);
     };
-    cage('x', -22, 1, 14.7, 17.3, 10.9, 14.1);     // V
-    cage('z', 22, -1, -12, -8, 10.9, 14.1);        // dodatkowa wysoka (pok. 1)
-    cage('x', -2, -1, 2.5, 6.5, 10.9, 14.1);       // dodatkowa wysoka nad E1
-    cage('x', 22, -1, 14.5, 17.5, 10.9, 14.1);     // Z2a
-    cage('z', 22, -1, 12.5, 15.5, 10.9, 14.1);     // Z2b
-    cage('x', 22, -1, -18.5, -15.5, 10.9, 14.1);   // Z3b
-    cage('x', -22, 1, -18.5, -15.5, 10.9, 14.1);   // Z4a
-    cage('z', -22, 1, 12.5, 15.5, 10.9, 14.1);     // Z3a
+    cage('x', -22, 1, 14.7, 17.3, 11.1, 13.5);     // V
+    cage('z', 22, -1, -12, -8, 11.1, 13.5);        // dodatkowa wysoka (pok. 1)
+    cage('x', -2, -1, 2.5, 6.5, 11.1, 13.5);       // dodatkowa wysoka nad E1
+    cage('x', 22, -1, 14.5, 17.5, 11.1, 13.5);     // Z2a
+    cage('z', 22, -1, 12.5, 15.5, 11.1, 13.5);     // Z2b
+    cage('x', 22, -1, -18.5, -15.5, 11.1, 13.5);   // Z3b
+    cage('x', -22, 1, -18.5, -15.5, 11.1, 13.5);   // Z4a
+    cage('z', -22, 1, 12.5, 15.5, 11.1, 13.5);     // Z3a
 
     // filary w pokoju 3: pierwszy zasłania Z3b przed wzrokiem z Z3a, drugi – przed wzrokiem z niskiej łaty E3
     // (z podłogi pokoju 3 łata Z3b jest widoczna)

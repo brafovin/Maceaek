@@ -18,7 +18,12 @@ export default {
     L.room(-12, 12, -45, 26, 18, DARK_ALL);
     // strefa początkowa: biała podłoga, przepaść 9 m, mur z oknem
     L.floor(-12, 12, -10, 10, 'dark');   // na północ od wieży – ciemna
-    L.floor(-12, 12, 10, 26);            // jedyna biała posadzka: na południe od wieży
+    // jedyna biała posadzka: łatka 2,5 x 2,5 m na wprost wieży (reszta ciemna – nie da się zrobić pary podłoga-podłoga)
+    L.floor(-12, -4.25, 10, 26, 'dark');
+    L.floor(-1.75, 12, 10, 26, 'dark');
+    L.floor(-4.25, -1.75, 10, 12.5, 'dark');
+    L.floor(-4.25, -1.75, 15, 26, 'dark');
+    L.floor(-4.25, -1.75, 12.5, 15);
     L.pit(-12, 12, -19, -10);
     L.floor(-12, 12, -45, -19, 'dark');
 
