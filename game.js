@@ -1,4 +1,5 @@
 import * as THREE from './vendor/three.module.js';
+import { LEVELS } from './levels.js';
 
 /* ==========================================================================
    Maceaek – komora testowa z działem portalowym
@@ -19,7 +20,6 @@ const PORTAL_HH = 1.15;      // połowa wysokości portalu
 const PORTAL_MIN_EXIT = 3.5; // minimalna prędkość wylotu z portalu
 const MAX_DEPTH = 2;         // ile poziomów „portal w portalu” jest renderowane
 const NEAR = 0.03;
-const SPAWN = new THREE.Vector3(0, 0.02, 18);
 const ACID_Y = -5;
 
 const COLORS = [0x2d9bff, 0xff8a1f];
@@ -106,6 +106,8 @@ const world = new THREE.Group();
 scene.add(world);
 const boxes = [];        // kolizje AABB
 const worldMeshes = [];  // do raycastu
+const levelObjects = []; // dodatkowe obiekty poziomu (kwas, lampy, pad…)
+const levelAnim = {};
 
 function addBox(x0, y0, z0, x1, y1, z1, kind = 'white') {
   const m = MATS[kind];
@@ -134,96 +136,56 @@ function addBox(x0, y0, z0, x1, y1, z1, kind = 'white') {
   return box;
 }
 
-function buildLevel() {
-  // podłoga z dołem (kwas) pośrodku
-  addBox(-26, -8, -26, -6, 0, 26, 'floor');
-  addBox(6, -8, -26, 26, 0, 26, 'floor');
-  addBox(-6, -8, -6, 6, 0, 26, 'floor');
-  addBox(-6, -8, -26, 6, 0, -16, 'floor');
-  addBox(-6, -8, -16, 6, -6, -6, 'dark');          // dno dołu
-
-  // ściany i sufit
-  addBox(-26, 0, -26, 26, 14, -24, 'white');       // północ
-  addBox(-26, 0, 24, 26, 14, 26, 'white');         // południe
-  addBox(-26, 0, -24, -24, 14, 24, 'white');       // zachód
-  addBox(24, 0, -24, 26, 14, 24, 'dark');          // wschód (nie przyjmuje portali)
-  addBox(-26, 14, -26, 26, 16, 26, 'floor');       // sufit
-
-  // schody po zachodniej stronie i podest
-  for (let i = 1; i <= 12; i++) addBox(-24, 0, 4, -18, 0.5 * i, 4 + 1.5 * (13 - i), 'white');
-  addBox(-24, 0, -8, -14, 6, 4, 'white');
-
-  // platforma docelowa (tylko przez portale)
-  addBox(14, 0, -24, 24, 5, -14, 'white');
-
-  // filary, ściany
-  addBox(-2, 0, 8, 2, 3, 12, 'white');
-  addBox(8, 0, 10, 12, 5, 14, 'white');
-  addBox(-12, 0, -14, -10, 8, -4, 'dark');         // ciemna ściana – bez portali
-  addBox(12, 0, 0, 14, 8, 10, 'white');
-
-  // kwas w dole
-  const acid = new THREE.Mesh(
-    new THREE.PlaneGeometry(12, 10),
-    new THREE.MeshBasicMaterial({ color: 0x78e03a, transparent: true, opacity: 0.92 })
-  );
-  acid.rotation.x = -Math.PI / 2;
-  acid.position.set(0, ACID_Y, -11);
-  scene.add(acid);
-  levelAnim.acid = acid;
-
-  // panele świetlne w suficie
-  const lightMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  for (const x of [-16, 0, 16]) for (const z of [-16, 0, 16]) {
-    const l = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), lightMat);
-    l.rotation.x = Math.PI / 2;
-    l.position.set(x, 13.98, z);
-    scene.add(l);
-  }
-
-  // pad „wyjście” na platformie docelowej
-  const pad = new THREE.Mesh(
-    new THREE.CircleGeometry(1.8, 40),
-    new THREE.MeshBasicMaterial({ color: 0x4ade80 })
-  );
-  pad.rotation.x = -Math.PI / 2;
-  pad.position.set(19, 5.015, -19);
-  scene.add(pad);
-  levelAnim.pad = pad;
-  const ring = new THREE.Mesh(
-    new THREE.RingGeometry(2.0, 2.25, 48),
-    new THREE.MeshBasicMaterial({ color: 0xbbf7d0 })
-  );
-  ring.rotation.x = -Math.PI / 2;
-  ring.position.set(19, 5.02, -19);
-  scene.add(ring);
-
-  // tablice na ścianie
-  function sign(text, sub, w, h, x, y, z, ry = 0) {
-    const c = document.createElement('canvas');
-    c.width = 1024; c.height = Math.round(1024 * h / w);
-    const g = c.getContext('2d');
-    g.fillStyle = 'rgba(20,24,30,.92)'; g.fillRect(0, 0, c.width, c.height);
-    g.strokeStyle = '#ffffff'; g.lineWidth = 8; g.strokeRect(14, 14, c.width - 28, c.height - 28);
-    g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.font = `700 ${Math.round(c.height * 0.3)}px system-ui, sans-serif`;
-    g.fillText(text, c.width / 2, c.height * 0.42);
-    g.font = `400 ${Math.round(c.height * 0.14)}px system-ui, sans-serif`;
-    g.fillStyle = '#9fb3c8';
-    g.fillText(sub, c.width / 2, c.height * 0.76);
-    const tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 4;
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex }));
-    m.position.set(x, y, z);
-    m.rotation.y = ry;
-    scene.add(m);
-  }
-  sign('KOMORA TESTOWA 01', 'Dotrzyj do zielonego pola na wysokiej platformie', 12, 3, 0, 9, -23.97);
-  sign('BRAK PORTALI', 'ta powierzchnia nie przyjmuje portali', 5, 1.4, 25.0 - 1.02, 7, 0, -Math.PI / 2);
+function addObject(obj) {
+  scene.add(obj);
+  levelObjects.push(obj);
+  return obj;
 }
-const levelAnim = {};
-buildLevel();
+
+const lightMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const acidMat = new THREE.MeshBasicMaterial({ color: 0x78e03a, transparent: true, opacity: 0.92 });
+const padMat = new THREE.MeshBasicMaterial({ color: 0x4ade80 });
+const padRingMat = new THREE.MeshBasicMaterial({ color: 0xbbf7d0 });
+const WALL_T = 2;
+
+// API dostępne dla definicji poziomów (levels.js)
+const LevelAPI = {
+  box: addBox,
+  // pokój: podłoga NIE jest tworzona (robi to floor()), ściany od y=-8 do h, sufit, lampy
+  room(x0, x1, z0, z1, h, o = {}) {
+    const k = { n: 'white', s: 'white', e: 'white', w: 'white', ceil: 'floor', ...o };
+    const T = WALL_T;
+    addBox(x0 - T, -8, z0 - T, x1 + T, h, z0, k.n);
+    addBox(x0 - T, -8, z1, x1 + T, h, z1 + T, k.s);
+    addBox(x0 - T, -8, z0, x0, h, z1, k.w);
+    addBox(x1, -8, z0, x1 + T, h, z1, k.e);
+    addBox(x0 - T, h, z0 - T, x1 + T, h + 2, z1 + T, k.ceil);
+    for (let x = x0 + 4; x < x1; x += 8) for (let z = z0 + 4; z < z1; z += 8) {
+      const l = new THREE.Mesh(new THREE.PlaneGeometry(3.5, 3.5), lightMat);
+      l.rotation.x = Math.PI / 2;
+      l.position.set(x, h - 0.02, z);
+      addObject(l);
+    }
+  },
+  floor(x0, x1, z0, z1, kind = 'floor') { return addBox(x0, -8, z0, x1, 0, z1, kind); },
+  // dół z kwasem – dziurę w podłodze tworzą sąsiednie floor()
+  pit(x0, x1, z0, z1) {
+    addBox(x0, -8, z0, x1, -6, z1, 'dark');
+    const acid = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), acidMat);
+    acid.rotation.x = -Math.PI / 2;
+    acid.position.set((x0 + x1) / 2, ACID_Y, (z0 + z1) / 2);
+    addObject(acid);
+  },
+};
+
+function clearLevel() {
+  for (const m of worldMeshes) { world.remove(m); m.geometry.dispose(); }
+  worldMeshes.length = 0;
+  boxes.length = 0;
+  for (const o of levelObjects) { scene.remove(o); o.geometry?.dispose(); }
+  levelObjects.length = 0;
+  for (const e of effects.splice(0)) { scene.remove(e.mesh); e.mesh.geometry.dispose(); e.mesh.material.dispose(); }
+}
 
 // ---------------------------------------------------------------- portale ----
 const DUMMY_TEX = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
@@ -536,7 +498,7 @@ function updateEffects(dt) {
 
 // ------------------------------------------------------------------ gracz ----
 const player = {
-  pos: SPAWN.clone(),
+  pos: new THREE.Vector3(),
   vel: new THREE.Vector3(),
   onGround: false,
   yaw: 0,
@@ -547,7 +509,10 @@ const player = {
 
 const keys = Object.create(null);
 let active = false;       // kursor zablokowany = gra aktywna
-let won = false;
+let levelDone = false;
+let levelIndex = 0;
+let levelDef = null;
+let levelTimer = 0;
 
 function overlaps(box, x, y, z) {
   return x - PLAYER_R < box.max.x && x + PLAYER_R > box.min.x &&
@@ -555,13 +520,15 @@ function overlaps(box, x, y, z) {
          z - PLAYER_R < box.max.z && z + PLAYER_R > box.min.z;
 }
 
-// czy ciało gracza mieści się w otworze portalu P (rzut na płaszczyznę portalu)
+// czy oś ciała gracza mieści się w otworze portalu P (rzut na płaszczyznę portalu).
+// Celowo łagodnie: liczy się środek ciała, nie jego narożniki – portal ma być „łatwy do trafienia”.
 const _c = new THREE.Vector3();
+const HOLE_PTS = [0.3, 0.9, 1.5];
+const HOLE_KR = 1.3, HOLE_KU = 1.12; // tolerancja trafienia w portal (względem narysowanego owalu)
 function bodyInHole(P, x, y, z) {
-  const hx = PLAYER_R * 0.75, hy0 = 0.2, hy1 = 1.6;
-  for (let i = 0; i < 8; i++) {
-    _c.set(x + (i & 1 ? hx : -hx), y + (i & 2 ? hy1 : hy0), z + (i & 4 ? hx : -hx)).sub(P.pos);
-    const r = _c.dot(P.right) / PORTAL_HW, u = _c.dot(P.up) / PORTAL_HH;
+  for (const h of HOLE_PTS) {
+    _c.set(x, y + h, z).sub(P.pos);
+    const r = _c.dot(P.right) / (PORTAL_HW * HOLE_KR), u = _c.dot(P.up) / (PORTAL_HH * HOLE_KU);
     if (r * r + u * u > 1) return false;
   }
   return true;
@@ -621,7 +588,7 @@ function moveAxis(axis, delta) {
   }
 
   // wejście na stopień
-  if (player.onGround) {
+  if (player.wasGround) {
     let top = -Infinity;
     for (const b of _hit) top = Math.max(top, b.max.y);
     if (top - p.y <= STEP_H) {
@@ -715,6 +682,7 @@ function physicsStep(dt) {
 
   _eyePrev.copy(player.pos); _eyePrev.y += EYE_H;
   const wasGround = player.onGround;
+  player.wasGround = wasGround;
   player.onGround = false;
   inFloorHole = false;
   moveAxis('x', player.vel.x * dt);
@@ -755,7 +723,7 @@ function tryTeleport(prev, now) {
     if (dPrev >= T && dNow < T) {
       const t = (dPrev - T) / (dPrev - dNow);
       _hitP.lerpVectors(prev, now, t).sub(P.pos);
-      const r = _hitP.dot(P.right) / PORTAL_HW, u = _hitP.dot(P.up) / PORTAL_HH;
+      const r = _hitP.dot(P.right) / (PORTAL_HW * HOLE_KR), u = _hitP.dot(P.up) / (PORTAL_HH * HOLE_KU);
       if (r * r + u * u < 1) { teleport(P); return; }
     }
   }
@@ -804,18 +772,18 @@ function teleport(P) {
   player.pitch = THREE.MathUtils.clamp(pitch, -1.5533, 1.5533);
   player.roll = roll;
 
-  // gdzie stają stopy: przy wylocie z podłogi/sufitu ciało stoi/wisi przy portalu,
-  // przy wylocie ze ściany oczy zachowują ciągłość
-  let feetY = eye.y - EYE_H;
+  // gdzie stają stopy: środek ciała przenosimy tak jak środek ciała (nie oczy),
+  // dzięki czemu przy wylocie z wysokiego portalu ciało nie zostaje w ścianie.
+  // Przy wylocie z podłogi/sufitu ciało stoi/wisi tuż przy portalu.
+  const centerNew = _c.set(player.pos.x, player.pos.y + 0.9, player.pos.z).applyMatrix4(M);
+  let feetY = centerNew.y - 0.9;
   if (O.normal.y > 0.5) feetY = O.pos.y + 0.002;
   else if (O.normal.y < -0.5) feetY = O.pos.y - PLAYER_H - 0.002;
-  player.pos.set(eye.x, feetY, eye.z);
+  player.pos.set(centerNew.x, feetY, centerNew.z);
   // wypchnij ze ścian, które nie są otworem portalu
   for (let i = 0; i < 4; i++) {
     if (!collect(player.pos.x, player.pos.y, player.pos.z, _hit).length) break;
-    let top = -Infinity;
-    for (const b of _hit) top = Math.max(top, b.max.y);
-    player.pos.y = top + EPS;
+    pushOut(_hit[0]);
   }
   player.onGround = false;
   player.camOffset.copy(camWorld).sub(_c.set(player.pos.x, player.pos.y + EYE_H, player.pos.z));
@@ -823,11 +791,67 @@ function teleport(P) {
 }
 
 function respawn() {
-  player.pos.copy(SPAWN);
+  const sp = levelDef ? levelDef.spawn : { x: 0, y: 0, z: 0, yaw: 0 };
+  player.pos.set(sp.x, sp.y + 0.02, sp.z);
   player.vel.set(0, 0, 0);
-  player.yaw = 0; player.pitch = 0; player.roll = 0;
+  player.yaw = sp.yaw || 0; player.pitch = 0; player.roll = 0;
   player.camOffset.set(0, 0, 0);
   player.onGround = false;
+}
+
+// ---------------------------------------------------------------- poziomy ----
+const levelNameEl = document.getElementById('levelname');
+const levelGrid = document.getElementById('levels');
+let doneSet = new Set();
+try { doneSet = new Set(JSON.parse(localStorage.getItem('maceaek.done') || '[]')); } catch { /* brak storage */ }
+
+function saveDone() {
+  try { localStorage.setItem('maceaek.done', JSON.stringify([...doneSet])); } catch { /* ignoruj */ }
+}
+
+function buildLevelGrid() {
+  levelGrid.innerHTML = '';
+  LEVELS.forEach((lv, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'lv' + (i === levelIndex ? ' cur' : '') + (doneSet.has(i) ? ' done' : '');
+    b.innerHTML = `<b>${i + 1}</b><span>${lv.name}</span>`;
+    b.addEventListener('click', (e) => { e.stopPropagation(); loadLevel(i); requestLock(); });
+    levelGrid.appendChild(b);
+  });
+}
+
+function loadLevel(i) {
+  levelIndex = ((i % LEVELS.length) + LEVELS.length) % LEVELS.length;
+  levelDef = LEVELS[levelIndex];
+  clearLevel();
+  portals.forEach(p => p.clear());
+  levelDef.build(LevelAPI);
+  // pole „wyjście”
+  const ex = levelDef.exit;
+  const pad = new THREE.Mesh(new THREE.CircleGeometry(1.8, 40), padMat);
+  pad.rotation.x = -Math.PI / 2;
+  pad.position.set(ex.x, ex.y + 0.015, ex.z);
+  addObject(pad);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(2.0, 2.25, 48), padRingMat);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(ex.x, ex.y + 0.02, ex.z);
+  addObject(ring);
+  levelDone = false;
+  levelTimer = 0;
+  respawn();
+  updateCrosshair();
+  levelNameEl.innerHTML = `<small>Poziom ${levelIndex + 1} / ${LEVELS.length}</small>${levelDef.name}`;
+  toast(levelDef.hint, 6000);
+  buildLevelGrid();
+}
+
+function restartLevel() {
+  portals.forEach(p => p.clear());
+  respawn();
+  updateCrosshair();
+  levelDone = false;
+  levelTimer = 0;
 }
 
 // ---------------------------------------------------------- strzelanie ----
@@ -897,6 +921,24 @@ function fire(index) {
     }
   }
 
+  // czy tuż przed portalem jest wolne miejsce (np. półka albo schody przy samej ścianie)
+  for (const b of boxes) {
+    if (b === box) continue;
+    let hitAll = true;
+    for (const a of AXES) {
+      let lo, hi;
+      if (a === nAxis) {
+        if (normal[a] > 0) { lo = pos[a] + 0.02; hi = pos[a] + 0.4; } else { lo = pos[a] - 0.4; hi = pos[a] - 0.02; }
+      } else { lo = pos[a] - ext[a] + 0.03; hi = pos[a] + ext[a] - 0.03; }
+      if (b.max[a] <= lo || b.min[a] >= hi) { hitAll = false; break; }
+    }
+    if (hitAll) {
+      spawnRing(hit.point, normal, 0x9aa4ae);
+      toast('Za mało miejsca na portal');
+      return false;
+    }
+  }
+
   // nie nakładaj na drugi portal
   const O = portals[1 - index];
   if (O.active && O.normal.dot(normal) > 0.99 && Math.abs(O.pos[nAxis] - pos[nAxis]) < 0.1) {
@@ -950,16 +992,18 @@ function setActive(v) {
   overlay.classList.toggle('hidden', v);
   crosshair.style.display = v ? 'block' : 'none';
   hint.style.display = v ? 'block' : 'none';
+  levelNameEl.style.display = v ? 'block' : 'none';
   if (!v) for (const k in keys) keys[k] = false;
 }
 
 // ----------------------------------------------------------------- input ----
-overlay.addEventListener('click', () => {
+function requestLock() {
   try {
     const r = canvas.requestPointerLock();
     if (r && r.catch) r.catch(() => {});
   } catch { /* ignoruj */ }
-});
+}
+overlay.addEventListener('click', requestLock);
 document.addEventListener('pointerlockchange', () => setActive(document.pointerLockElement === canvas));
 document.addEventListener('pointerlockerror', () => {
   const err = document.getElementById('err');
@@ -987,9 +1031,11 @@ document.addEventListener('keydown', (e) => {
   keys[e.code] = true;
   if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
   if (e.code === 'KeyR' && !e.repeat && (active || game.forceActive)) {
-    resetPortals();
-    if (e.shiftKey || player.pos.y < -1) respawn();
-    toast('Portale usunięte');
+    restartLevel();
+    toast('Poziom zaczęty od nowa');
+  }
+  if ((e.code === 'KeyN' || e.code === 'KeyP') && !e.repeat && (active || game.forceActive)) {
+    loadLevel(levelIndex + (e.code === 'KeyN' ? 1 : -1));
   }
 });
 document.addEventListener('keyup', (e) => { keys[e.code] = false; });
@@ -1047,16 +1093,27 @@ function frame() {
   lastT = now;
   time += dt;
 
-  const steps = Math.max(1, Math.ceil(dt / (1 / 120)));
-  for (let i = 0; i < steps; i++) physicsStep(dt / steps);
-
-  // pad wyjściowy
-  if (!won && player.onGround && Math.hypot(player.pos.x - 19, player.pos.z + 19) < 1.8 && Math.abs(player.pos.y - 5) < 0.2) {
-    won = true;
-    toast('Komora ukończona! Gratulacje 🎉', 5000);
+  if (!game.manual) {
+    const steps = Math.max(1, Math.ceil(dt / (1 / 120)));
+    for (let i = 0; i < steps; i++) physicsStep(dt / steps);
   }
-  if (levelAnim.pad) levelAnim.pad.material.color.setHSL(0.38, 0.7, 0.5 + 0.1 * Math.sin(time * 3));
-  if (levelAnim.acid) levelAnim.acid.material.color.setHSL(0.25 + 0.02 * Math.sin(time * 2), 0.75, 0.5 + 0.05 * Math.sin(time * 3.3));
+
+  // pole „wyjście”
+  if (levelDone) {
+    levelTimer += dt;
+    if (levelTimer > 2.6) loadLevel(levelIndex + 1);
+  } else {
+    const ex = levelDef.exit;
+    if (player.onGround && Math.hypot(player.pos.x - ex.x, player.pos.z - ex.z) < 1.8 && Math.abs(player.pos.y - ex.y) < 0.3) {
+      levelDone = true;
+      levelTimer = 0;
+      doneSet.add(levelIndex);
+      saveDone();
+      toast(levelIndex === LEVELS.length - 1 ? 'Gratulacje – ukończyłeś wszystkie poziomy! 🎉' : 'Poziom ukończony!', 2600);
+    }
+  }
+  padMat.color.setHSL(0.38, 0.7, 0.5 + 0.1 * Math.sin(time * 3));
+  acidMat.color.setHSL(0.25 + 0.02 * Math.sin(time * 2), 0.75, 0.5 + 0.05 * Math.sin(time * 3.3));
 
   for (const P of portals) {
     P.uniforms.uTime.value = time;
@@ -1082,13 +1139,16 @@ function frame() {
 // interfejs do debugowania / testów
 const game = {
   THREE, player, portals, camera, renderer, scene, boxes,
-  fire, resetPortals, respawn, setActive, keys,
+  fire, resetPortals, respawn, setActive, keys, loadLevel, restartLevel, LEVELS,
+  get levelDone() { return levelDone; },
+  levelIndex: () => levelIndex,
   forceActive: false,
+  manual: false,
   step: physicsStep,
   rtCache, vcams, transforms,
 };
 window.game = game;
 
 updateCrosshair();
-respawn();
+loadLevel(Number(new URLSearchParams(location.search).get('level') || 1) - 1);
 frame();
