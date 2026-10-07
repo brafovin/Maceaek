@@ -426,10 +426,10 @@ function overlaps(box, x, y, z) {
 const _c = new THREE.Vector3();
 const HOLE_PTS = [0.3, 0.9, 1.5];
 const HOLE_KR = 1.3, HOLE_KU = 1.12; // tolerancja trafienia w portal (względem narysowanego owalu)
-function bodyInHole(P, x, y, z) {
+function bodyInHole(P, x, y, z, loose = 1) {
   for (const h of HOLE_PTS) {
     _c.set(x, y + h, z).sub(P.pos);
-    const r = _c.dot(P.right) / (PORTAL_HW * HOLE_KR), u = _c.dot(P.up) / (PORTAL_HH * HOLE_KU);
+    const r = _c.dot(P.right) / (PORTAL_HW * HOLE_KR * loose), u = _c.dot(P.up) / (PORTAL_HH * HOLE_KU * loose);
     if (r * r + u * u > 1) return false;
   }
   return true;
@@ -441,7 +441,11 @@ function boxIgnored(box, x, y, z) {
     if (P.host !== box || !P.linked) continue;
     _c.set(x, y + EYE_H, z).sub(P.pos);
     if (_c.dot(P.normal) < -0.6) continue;
-    if (bodyInHole(P, x, y, z)) {
+    // gracz już zanurzony w ścianie-gospodarzu (stopy poniżej płaszczyzny portalu) nie może „wypaść” z otworu bokiem
+    // i zapaść się przez bryłę – dopóki oczy są nad płaszczyzną, tolerancja jest luźniejsza
+    _c.set(x, y, z).sub(P.pos);
+    const sunk = _c.dot(P.normal) < -0.05;
+    if (bodyInHole(P, x, y, z, sunk ? 1.7 : 1)) {
       if (Math.abs(P.normal.y) > 0.5) inFloorHole = true;
       return true;
     }

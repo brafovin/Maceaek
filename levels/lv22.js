@@ -6,7 +6,8 @@ import { DARK_ALL } from './util.js';
 //      Biała ściana WS za przepaścią i łatka PA pod kostką to jedyne portalowalne miejsca po tej stronie
 //      (start też ma tylko białą łatkę podłogi – reszta jest ciemna).
 //   W1 przegroda: drzwi D1 + kurtyna F1 w jednym otworze (zachód), szyba (wschód)
-//   E  komora środkowa: podest PE z przyciskiem P
+//   E  komora środkowa: podest PE z przyciskiem P; przegroda przy zachodniej ścianie zasłania linię wzroku
+//      D4 → D1 (inaczej z C, stojąc w D4, można by trafić w PA i pominąć cały środek)
 //   W2 przegroda: okno O2 z drzwiami D3 i kurtyną F2 (D3 trzyma przycisk P na podeście PE – czyli kostka),
 //      oraz drzwi służbowe D4 z kurtyną F4 (przyciski czasowe U w E i V w C – droga powrotna, nie okno).
 //      Na północnej ścianie W2, wysoko, łatka H (widać ją tylko z C).
@@ -158,7 +159,7 @@ export default {
     // ---- tablice ----
     L.sign('DRZWI TRZYMA PRZYCISK', 'zdejmij kostkę – zamkną się', 5, 1.2, (O1.x0 + O1.x1) / 2, 6.6, -5.85, 0);
     L.sign('CEL: KOSTKA NA PRZYCISKU', 'czerwony przycisk leży za dwiema kurtynami', 7, 1.4, 7.7, 7.6, -5.85, 0);
-    L.sign('KURTYNA', 'okno obok otwiera przycisk na podeście', 6, 1.1, (O2.x0 + O2.x1) / 2, 5.5, -19.85, 0);
+    L.sign('KURTYNA', 'okno otwiera przycisk na podeście', 6, 1.1, (O2.x0 + O2.x1) / 2, 5.5, -19.85, 0);
     L.sign('KURTYNA', 'zabiera portale i kostki', 4, 1, (O2.x0 + O2.x1) / 2, 5.5, -22.15, Math.PI);
     L.sign('PRZEJŚCIE SŁUŻBOWE', 'przycisk obok otwiera drzwi na 5 s', 4.4, 1.1, -13.95, 3.4, U1.z, Math.PI / 2);
     L.sign('PRZEJŚCIE SŁUŻBOWE', 'przycisk obok otwiera drzwi na 5 s', 4.4, 1.1, -13.95, 3.4, V1.z, Math.PI / 2);
