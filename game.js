@@ -1,5 +1,6 @@
 import * as THREE from './vendor/three.module.js';
 import allLevels from './levels/index.js';
+import { createGfx, readQuality, writeQuality } from './gfx.js';
 
 const LEVELS = [...allLevels];
 const params = new URLSearchParams(location.search);
@@ -21,7 +22,7 @@ const STEP_H = 0.55;         // automatyczne wchodzenie na schodki
 const PORTAL_HW = 0.65;      // połowa szerokości portalu
 const PORTAL_HH = 1.15;      // połowa wysokości portalu
 const PORTAL_MIN_EXIT = 3.5; // minimalna prędkość wylotu z portalu
-const MAX_DEPTH = 2;         // ile poziomów „portal w portalu” jest renderowane
+let MAX_DEPTH = 2;           // ile poziomów „portal w portalu” jest renderowane (preset jakości)
 const NEAR = 0.03;
 const ACID_Y = -5;
 
@@ -45,7 +46,8 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, 1, NEAR, 250);
 camera.rotation.order = 'YXZ';
 
-// oświetlenie sceny
+// oświetlenie sceny – świat ma światło wypalone w kolorach wierzchołków (gfx.js), te światła dotyczą
+// tylko materiałów Lambert (np. podstawa przycisku)
 scene.add(new THREE.AmbientLight(0xffffff, 1.15));
 scene.add(new THREE.HemisphereLight(0xdfeaff, 0x6b7280, 0.9));
 const sun = new THREE.DirectionalLight(0xffffff, 1.5);
@@ -75,53 +77,9 @@ function speckle(g, s, n, alpha) {
   }
 }
 
-const texWhite = makeCanvasTexture(256, (g, s) => {
-  g.fillStyle = '#e6eaee'; g.fillRect(0, 0, s, s);
-  speckle(g, s, 500, 0.05);
-  g.strokeStyle = '#aab3bc'; g.lineWidth = 5; g.strokeRect(2.5, 2.5, s - 5, s - 5);
-  g.strokeStyle = '#f7f9fb'; g.lineWidth = 2; g.strokeRect(7, 7, s - 14, s - 14);
-  g.fillStyle = '#c3cad1';
-  for (const [x, y] of [[16, 16], [s - 16, 16], [16, s - 16], [s - 16, s - 16]]) { g.beginPath(); g.arc(x, y, 3, 0, 7); g.fill(); }
-});
-const texFloor = makeCanvasTexture(256, (g, s) => {
-  g.fillStyle = '#c9ced4'; g.fillRect(0, 0, s, s);
-  speckle(g, s, 900, 0.07);
-  g.strokeStyle = '#8f98a2'; g.lineWidth = 5; g.strokeRect(2.5, 2.5, s - 5, s - 5);
-  g.strokeStyle = '#dde1e6'; g.lineWidth = 2; g.strokeRect(7, 7, s - 14, s - 14);
-});
-const texDark = makeCanvasTexture(256, (g, s) => {
-  g.fillStyle = '#272b30'; g.fillRect(0, 0, s, s);
-  speckle(g, s, 700, 0.06);
-  g.strokeStyle = '#14171a'; g.lineWidth = 6; g.strokeRect(3, 3, s - 6, s - 6);
-  g.strokeStyle = '#3a4047'; g.lineWidth = 2; g.strokeRect(9, 9, s - 18, s - 18);
-  g.strokeStyle = '#3a4047'; g.lineWidth = 3;
-  g.beginPath(); g.moveTo(24, s - 24); g.lineTo(s - 24, 24); g.moveTo(24, 24); g.lineTo(s - 24, s - 24); g.stroke();
-});
-
-const texGrate = makeCanvasTexture(128, (g, s) => {
-  g.clearRect(0, 0, s, s);
-  g.strokeStyle = '#d5dde5'; g.lineWidth = 8;
-  for (let i = 0; i <= 2; i++) {
-    g.beginPath(); g.moveTo(i * s / 2, 0); g.lineTo(i * s / 2, s); g.moveTo(0, i * s / 2); g.lineTo(s, i * s / 2); g.stroke();
-  }
-});
-const texDoor = makeCanvasTexture(256, (g, s) => {
-  g.fillStyle = '#2b3036'; g.fillRect(0, 0, s, s);
-  g.strokeStyle = '#ff9a2e'; g.lineWidth = 14;
-  for (let i = -s; i < s * 2; i += 64) { g.beginPath(); g.moveTo(i, s); g.lineTo(i + s, 0); g.stroke(); }
-  g.fillStyle = 'rgba(20,24,28,.82)'; g.fillRect(24, 24, s - 48, s - 48);
-  g.strokeStyle = '#59606a'; g.lineWidth = 4; g.strokeRect(24, 24, s - 48, s - 48);
-});
-
-// rodzaje powierzchni: portalable = przyjmuje portale, shootThrough = strzał przelatuje (kratka)
-const MATS = {
-  white: { mat: new THREE.MeshLambertMaterial({ map: texWhite }), portalable: true, tile: 2 },
-  floor: { mat: new THREE.MeshLambertMaterial({ map: texFloor }), portalable: true, tile: 2 },
-  dark:  { mat: new THREE.MeshLambertMaterial({ map: texDark }),  portalable: false, tile: 2 },
-  door:  { mat: new THREE.MeshLambertMaterial({ map: texDoor }),  portalable: false, tile: 2 },
-  glass: { mat: new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.2, depthWrite: false }), portalable: false, tile: 2 },
-  grate: { mat: new THREE.MeshBasicMaterial({ map: texGrate, transparent: true, alphaTest: 0.35, side: THREE.DoubleSide }), portalable: false, tile: 1, shootThrough: true },
-};
+// materiały i tekstury świata, wypalone światło, lampy, mgła, presety jakości – gfx.js
+const gfx = createGfx(THREE, renderer, scene);
+const MATS = gfx.MATS;
 
 // ----------------------------------------------------------------- świat ----
 const world = new THREE.Group();
@@ -133,18 +91,9 @@ const levelAnim = {};
 
 function addBox(x0, y0, z0, x1, y1, z1, kind = 'white') {
   const m = MATS[kind];
+  // ten mesh służy do raycastu i drzwi; wygląd świata powstaje w gfx.bake (wypalone światło)
   const geo = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0);
   geo.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
-  // UV we współrzędnych świata, żeby sąsiednie ściany miały spójną siatkę
-  const p = geo.attributes.position, n = geo.attributes.normal, uv = geo.attributes.uv;
-  for (let i = 0; i < p.count; i++) {
-    const ax = Math.abs(n.getX(i)), ay = Math.abs(n.getY(i));
-    let u, v;
-    if (ax > 0.5) { u = p.getZ(i); v = p.getY(i); }
-    else if (ay > 0.5) { u = p.getX(i); v = p.getZ(i); }
-    else { u = p.getX(i); v = p.getY(i); }
-    uv.setXY(i, u / m.tile, v / m.tile);
-  }
   const mesh = new THREE.Mesh(geo, m.mat);
   const box = {
     min: new THREE.Vector3(x0, y0, z0),
@@ -167,7 +116,6 @@ function addObject(obj) {
   return obj;
 }
 
-const lightMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 const acidMat = new THREE.MeshBasicMaterial({ color: 0x78e03a, transparent: true, opacity: 0.92 });
 const padMat = new THREE.MeshBasicMaterial({ color: 0x4ade80 });
 const padRingMat = new THREE.MeshBasicMaterial({ color: 0xbbf7d0 });
@@ -208,12 +156,7 @@ const LevelAPI = {
     addBox(x0 - T, -8, z0, x0, h, z1, k.w);
     addBox(x1, -8, z0, x1 + T, h, z1, k.e);
     addBox(x0 - T, h, z0 - T, x1 + T, h + 2, z1 + T, k.ceil);
-    for (let x = x0 + 4; x < x1; x += 8) for (let z = z0 + 4; z < z1; z += 8) {
-      const l = new THREE.Mesh(new THREE.PlaneGeometry(3.5, 3.5), lightMat);
-      l.rotation.x = Math.PI / 2;
-      l.position.set(x, h - 0.02, z);
-      addObject(l);
-    }
+    for (let x = x0 + 4; x < x1; x += 8) for (let z = z0 + 4; z < z1; z += 8) gfx.addLamp(x, h, z);
   },
   floor(x0, x1, z0, z1, kind = 'floor') { return addBox(x0, -8, z0, x1, 0, z1, kind); },
   // kostka (y = wysokość podłoża, na którym leży)
@@ -229,6 +172,7 @@ const LevelAPI = {
   // dół z kwasem – dziurę w podłodze tworzą sąsiednie floor()
   pit(x0, x1, z0, z1) {
     addBox(x0, -8, z0, x1, -6, z1, 'dark');
+    gfx.addPit(x0, x1, z0, z1);
     const acid = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), acidMat);
     acid.rotation.x = -Math.PI / 2;
     acid.position.set((x0 + x1) / 2, ACID_Y, (z0 + z1) / 2);
@@ -237,6 +181,7 @@ const LevelAPI = {
 };
 
 function clearLevel() {
+  gfx.clear();
   for (const m of worldMeshes) { world.remove(m); m.geometry.dispose(); }
   worldMeshes.length = 0;
   boxes.length = 0;
@@ -379,10 +324,10 @@ let viewW = 1, viewH = 1;
 function rtFor(portal, depth) {
   const key = portal.index + ':' + depth;
   let rt = rtCache.get(key);
-  const k = depth === 0 ? 1 : 0.5;
+  const k = depth === 0 ? gfx.quality.rt0 : gfx.quality.rtN;
   const w = Math.max(2, Math.floor(viewW * k)), h = Math.max(2, Math.floor(viewH * k));
   if (!rt) {
-    rt = new THREE.WebGLRenderTarget(w, h, { depthBuffer: true, samples: depth === 0 ? 4 : 0 });
+    rt = new THREE.WebGLRenderTarget(w, h, { depthBuffer: true, samples: depth === 0 ? gfx.quality.msaa : 0 });
     rt.texture.minFilter = THREE.LinearFilter;
     rt.texture.magFilter = THREE.LinearFilter;
     rtCache.set(key, rt);
@@ -1296,6 +1241,7 @@ function loadLevel(i) {
   clearLevel();
   portals.forEach(p => p.clear());
   levelDef.build(LevelAPI);
+  gfx.bake(bakeContext());
   // pole „wyjście”
   const ex = levelDef.exit;
   const pad = new THREE.Mesh(new THREE.CircleGeometry(1.8, 40), padMat);
@@ -1313,6 +1259,15 @@ function loadLevel(i) {
   levelNameEl.innerHTML = `<small>Poziom ${levelIndex + 1} / ${LEVELS.length}</small>${levelDef.name}`;
   toast(levelDef.hint, 6000);
   buildLevelGrid();
+}
+
+// kontekst wypalania światła i siatki świata (gfx.bake)
+function bakeContext() {
+  return {
+    boxes, meshes: worldMeshes, exit: levelDef.exit, render: !game.noRender,
+    add: addObject,
+    remove(o) { scene.remove(o); const i = levelObjects.indexOf(o); if (i >= 0) levelObjects.splice(i, 1); },
+  };
 }
 
 function exitReached() {
@@ -1573,6 +1528,23 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
+// ---------------------------------------------------------------- jakość ----
+// preset: pixelRatio, głębokość portali, rozmiary i MSAA render targetów, gęstość wypalania (gfx.QUALITY)
+let qualityName = 'high';
+function setQuality(name, save = true) {
+  if (!gfx.QUALITY[name]) return false;
+  const q = gfx.applyQuality(name);
+  qualityName = name;
+  MAX_DEPTH = q.maxDepth;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatio));
+  for (const rt of rtCache.values()) rt.dispose();
+  rtCache.clear();
+  resize();
+  gfx.rebake();
+  if (save) writeQuality(name);
+  return true;
+}
+
 // ------------------------------------------------------------ pętla gry ----
 let lastT = performance.now();
 let time = 0;
@@ -1641,6 +1613,7 @@ function frame() {
   }
   updateEffects(dt);
   mechanicsVisuals(dt);
+  gfx.updateDynamics(cubes, dt);
   updateCamera(dt);
   updateGun(dt);
 
@@ -1669,6 +1642,9 @@ const game = {
   noRender: false,   // true = bez rysowania (szybkie testy)
   step: physicsStep,
   rtCache, vcams, transforms,
+  gfx,
+  setQuality,
+  getQuality: () => qualityName,
 };
 window.game = game;
 
@@ -1690,6 +1666,7 @@ async function boot() {
     window.T = kit.install(game);
   }
   updateCrosshair();
+  setQuality(readQuality(), false);
   loadLevel(Number(params.get('level') || 1) - 1);
   frame();
   window.gameReady = true;
