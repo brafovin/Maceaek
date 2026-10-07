@@ -837,15 +837,22 @@ function holdTarget(out) {
 function stepCube(c, dt) {
   if (c.held) {
     const t = holdTarget(_holdT);
+    // cel jest za daleko (np. po śmierci/respawnie gracza) – upuść, zamiast „teleportować” kostkę przez ściany
+    if (c.pos.distanceTo(t) > 3.2) { dropCube(false, true); syncCubeBox(c); return; }
     const old = _p.copy(c.pos);
     c.onGround = false;
     c.vel.set(0, 0, 0);
-    moveCubeAxis(c, 'x', t.x - c.pos.x);
-    moveCubeAxis(c, 'y', t.y - c.pos.y);
-    moveCubeAxis(c, 'z', t.z - c.pos.z);
+    // przesuwamy małymi krokami (≤ 0.3 m), żeby nie przeskoczyć cienkich ścian, kratek i fizzlerów
+    const dx = t.x - c.pos.x, dy = t.y - c.pos.y, dz = t.z - c.pos.z;
+    const n = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz)) / 0.3));
+    for (let i = 0; i < n; i++) {
+      moveCubeAxis(c, 'x', dx / n);
+      moveCubeAxis(c, 'y', dy / n);
+      moveCubeAxis(c, 'z', dz / n);
+      if (cubeInFizzler(c)) { respawnCube(c); syncCubeBox(c); return; }
+    }
     c.vel.copy(c.pos).sub(old).multiplyScalar(1 / dt);
     c.vel.clampLength(0, 14);
-    if (c.pos.distanceTo(t) > 2.8) dropCube(false);
   } else {
     const prev = _p.copy(c.pos);
     c.vel.y = Math.max(c.vel.y - GRAVITY * dt, -55);
@@ -862,13 +869,19 @@ function stepCube(c, dt) {
   syncCubeBox(c);
 }
 
+function cubeInFizzler(c) {
+  for (const f of fizzlers) if (cubeHits(f, c.pos.x, c.pos.y, c.pos.z)) { mechEvent('fizzle', f); return true; }
+  return false;
+}
+
 function cubeTeleport(c, prev) {
   if (!portals[0].linked) return;
   for (const P of portals) {
     const dPrev = _cc.subVectors(prev, P.pos).dot(P.normal);
     const dNow = _holdD.subVectors(c.pos, P.pos).dot(P.normal);
-    if (dPrev >= 0 && dNow < 0) {
-      const t = dPrev / (dPrev - dNow);
+    // także kostka „wklejona” w ścianę z portalem (upuszczona zbyt blisko) przechodzi, jeśli jest w otworze
+    if ((dPrev >= 0 && dNow < 0) || (dNow < 0 && dNow > -0.6)) {
+      const t = dPrev >= 0 ? dPrev / (dPrev - dNow) : 1;
       _holdT.lerpVectors(prev, c.pos, t).sub(P.pos);
       const r = _holdT.dot(P.right) / (PORTAL_HW * 1.2), u = _holdT.dot(P.up) / (PORTAL_HH * 1.1);
       if (r * r + u * u < 1) {
@@ -887,7 +900,7 @@ function cubeTeleport(c, prev) {
 }
 
 function respawnCube(c) {
-  if (c.held) dropCube(false);
+  if (c.held) dropCube(false, true);
   c.pos.copy(c.spawn);
   c.vel.set(0, 0, 0);
   c.onGround = false;
@@ -956,9 +969,11 @@ function pickCube() {
   return true;
 }
 
-function dropCube(throwIt) {
+function dropCube(throwIt, internal = false) {
   const c = mech.held;
   if (!c) return false;
+  // upuszczenie w powietrzu pozwalałoby „wspinać się” na kostce (skok, podniesienie, puszczenie pod stopami)
+  if (!throwIt && !internal && !player.onGround) return false;
   c.held = false;
   mech.held = null;
   dynBoxes.push(c.dyn);
@@ -1115,13 +1130,14 @@ function resetMechanics() {
 }
 
 function restartMechanics() {
-  if (mech.held) dropCube(false);
+  if (mech.held) dropCube(false, true);
   for (const c of cubes) { c.pos.copy(c.spawn); c.vel.set(0, 0, 0); c.onGround = false; syncCubeBox(c); c.mesh.position.copy(c.pos); }
   for (const b of buttons) { b.pressed = false; b.hold = 0; }
   for (const d of doors) { d.box.disabled = false; d.open = 0; d.mesh.position.y = 0; d.mesh.visible = true; }
 }
 
 function respawn() {
+  if (mech.held) dropCube(false, true);
   const sp = levelDef ? levelDef.spawn : { x: 0, y: 0, z: 0, yaw: 0 };
   player.pos.set(sp.x, sp.y + 0.02, sp.z);
   player.vel.set(0, 0, 0);
@@ -1393,7 +1409,7 @@ document.addEventListener('keydown', (e) => {
     toast('Poziom zaczęty od nowa');
   }
   if (e.code === 'KeyE' && !e.repeat && (active || game.forceActive)) {
-    if (mech.held) { gameAudio.cubeDrop(mech.held); dropCube(false); }
+    if (mech.held) { const hc = mech.held; if (dropCube(false)) gameAudio.cubeDrop(hc); else toast('Nie możesz upuścić kostki w powietrzu', 900); }
     else if (!pickCube()) toast('Nie ma czego podnieść', 900);
     else audio.play('cube-pick');
   }

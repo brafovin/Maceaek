@@ -71,6 +71,28 @@ const tests = {
     for (let i = 0; i < 240; i++) g.step(T.DT);
     T.assert(c.pos.x < 0 && Math.abs(c.pos.z - 6) < 1.5, 'kostka powinna wylecieć z zachodniej ściany, jest ' + c.pos.toArray().map(v => +v.toFixed(2)));
   },
+  'nie można upuścić kostki w powietrzu': () => {
+    const T = window.T, g = game;
+    g.restartLevel();
+    T.tp(-6, 0, 4.2); T.face(0, -0.2);
+    T.wait(0.3);
+    T.aim(-6, 0.4, 2); T.pick();
+    T.assert(g.mech.held, 'kostka powinna być w rękach');
+    g.keys.Space = true; g.step(T.DT); g.keys.Space = false;
+    T.run(0.1, {}, null);
+    T.assert(!g.dropCube(false), 'upuszczenie w powietrzu powinno być odrzucone');
+    T.assert(g.mech.held, 'kostka powinna zostać w rękach');
+    T.wait(1.0);
+    T.assert(g.dropCube(false), 'na ziemi upuszczenie powinno działać');
+  },
+  'respawn gracza upuszcza trzymaną kostkę': () => {
+    const T = window.T, g = game;
+    g.restartLevel();
+    T.tp(-6, 0, 4.2); T.face(0, -0.2); T.wait(0.3);
+    T.aim(-6, 0.4, 2); T.pick();
+    g.respawn();
+    T.assert(!g.mech.held, 'po respawnie kostka nie może być trzymana');
+  },
   'drzwi otwierają się od przycisku i zamykają po zwolnieniu': () => {
     const T = window.T, g = game;
     g.restartLevel();
