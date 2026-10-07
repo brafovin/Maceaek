@@ -3,92 +3,66 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>Maceaek – Komora testowa</title>
-<style>
-  :root{--blue:#2d9bff;--orange:#ff8a1f}
-  *{box-sizing:border-box}
-  html,body{margin:0;height:100%;overflow:hidden;background:#0b0f14;color:#f1f5f9;font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;user-select:none}
-  canvas{display:block;width:100vw;height:100vh}
-
-  #crosshair{position:fixed;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;pointer-events:none;display:none}
-  #crosshair svg{width:100%;height:100%;overflow:visible}
-  #crosshair .arc{fill:none;stroke-width:3;stroke-linecap:round;opacity:.75;transition:fill .15s,opacity .15s}
-  #crosshair .arc.blue{stroke:var(--blue)}
-  #crosshair .arc.orange{stroke:var(--orange)}
-  #crosshair .blob{opacity:0;transition:opacity .15s}
-  #crosshair .blob.on{opacity:.95}
-  #crosshair .dot{fill:#fff;opacity:.9}
-
-  #hint{position:fixed;left:16px;bottom:14px;font-size:13px;line-height:1.6;opacity:.7;pointer-events:none;display:none;text-shadow:0 1px 3px #000}
-  #hint b{color:#fff}
-  #hint .b{color:var(--blue)} #hint .o{color:var(--orange)}
-
-  #levelname{position:fixed;left:50%;top:14px;transform:translateX(-50%);text-align:center;font-weight:700;font-size:18px;text-shadow:0 1px 4px #000;pointer-events:none;display:none}
-  #levelname small{display:block;font-weight:500;font-size:12px;opacity:.65;letter-spacing:.08em;text-transform:uppercase}
-  #toast{position:fixed;left:50%;top:72%;transform:translateX(-50%);max-width:min(90vw,720px);text-align:center;padding:9px 18px;border-radius:18px;line-height:1.4;background:rgba(10,14,20,.72);font-size:15px;opacity:0;transition:opacity .25s;pointer-events:none}
-  #toast.show{opacity:1}
-
-  #overlay{position:fixed;inset:0;display:grid;place-items:center;background:radial-gradient(ellipse at center,rgba(15,23,42,.78),rgba(2,6,12,.92));cursor:pointer;padding:16px}
-  #overlay.hidden{display:none}
-  #card{max-width:520px;text-align:center}
-  #card h1{font-size:clamp(30px,6vw,52px);margin:0 0 6px;letter-spacing:.02em}
-  #card h1 span{background:linear-gradient(90deg,var(--blue),var(--orange));-webkit-background-clip:text;background-clip:text;color:transparent}
-  #card p.sub{margin:0 0 22px;opacity:.65}
-  #card .play{display:inline-block;padding:12px 28px;border-radius:999px;background:#f8fafc;color:#0f172a;font-weight:700;font-size:17px}
-  #levels{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:22px 0 0}
-  #levels .lv{all:unset;box-sizing:border-box;cursor:pointer;padding:8px 6px;border-radius:10px;background:#1e293b;border:1px solid #334155;text-align:center;font-size:11px;line-height:1.25;color:#cbd5e1;transition:background .15s,transform .1s}
-  #levels .lv:hover{background:#334155;transform:translateY(-1px)}
-  #levels .lv b{display:block;font-size:18px;color:#fff}
-  #levels .lv span{display:block;opacity:.75;min-height:2.5em}
-  #levels .lv.cur{border-color:#f8fafc}
-  #levels .lv.done b::after{content:" ✓";color:#4ade80;font-size:14px}
-  #card table{margin:26px auto 0;border-collapse:collapse;font-size:14px;text-align:left}
-  #card td{padding:4px 12px;opacity:.85}
-  #card td:first-child{text-align:right;white-space:nowrap}
-  kbd{display:inline-block;min-width:24px;padding:1px 7px;border-radius:5px;background:#1e293b;border:1px solid #334155;font:600 12px ui-monospace,monospace;text-align:center}
-  .b{color:var(--blue)} .o{color:var(--orange)}
-  #err{margin-top:20px;color:#fca5a5;font-size:14px;display:none}
-</style>
+<link rel="stylesheet" href="./ui.css?v=2">
 </head>
-<body>
-<canvas id="c"></canvas>
+<body data-screen="title" data-ingame="0">
+<canvas id="c" aria-label="Widok gry"></canvas>
 
-<div id="crosshair">
-  <svg viewBox="-22 -22 44 44">
-    <path class="blob blue"   id="blobBlue"   d="M -5.5 -15 A 16 16 0 0 0 -5.5 15 L -5.5 15 A 12 12 0 0 1 -5.5 -15 Z" fill="#2d9bff" stroke="none"/>
-    <path class="blob orange" id="blobOrange" d="M 5.5 -15 A 16 16 0 0 1 5.5 15 L 5.5 15 A 12 12 0 0 0 5.5 -15 Z" fill="#ff8a1f" stroke="none"/>
-    <path class="arc blue"   d="M -5.5 -15 A 16 16 0 0 0 -5.5 15"/>
-    <path class="arc orange" d="M 5.5 -15 A 16 16 0 0 1 5.5 15"/>
-    <circle class="dot" r="1.6"/>
-  </svg>
-</div>
-
-<div id="levelname"></div>
-<div id="hint">
-  <b>WASD</b> ruch · <b>Mysz</b> rozglądanie · <b>Spacja</b> skok · <b>Shift</b> bieg<br>
-  <b class="b">LPM</b> niebieski portal · <b class="o">PPM</b> pomarańczowy portal · <b>E</b> kostka (<b>Q</b> rzut) · <b>R</b> restart poziomu · <b>N</b>/<b>P</b> następny/poprzedni · <b>Esc</b> pauza
-</div>
-<div id="toast"></div>
-
-<div id="overlay">
-  <div id="card">
-    <h1><span>Komora testowa</span></h1>
-    <p class="sub">Maceaek · prototyp gry z działem portalowym</p>
-    <div class="play">Kliknij, aby grać</div>
-    <div id="levels"></div>
-    <table>
-      <tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></td><td>poruszanie się</td></tr>
-      <tr><td>mysz</td><td>patrzenie w kierunku myszy</td></tr>
-      <tr><td><kbd>LPM</kbd></td><td><span class="b">niebieski</span> portal</td></tr>
-      <tr><td><kbd>PPM</kbd></td><td><span class="o">pomarańczowy</span> portal</td></tr>
-      <tr><td><kbd>Spacja</kbd> <kbd>Shift</kbd></td><td>skok · bieg</td></tr>
-      <tr><td><kbd>E</kbd> <kbd>Q</kbd></td><td>podnieś / upuść kostkę · rzuć kostką</td></tr>
-      <tr><td><kbd>R</kbd></td><td>restart poziomu (usuwa portale)</td></tr>
-    </table>
-    <div id="err"></div>
+<!-- HUD: widoczny w trakcie gry; treść uzupełnia ui.js -->
+<div id="hud">
+  <div id="crosshair" data-state="idle" aria-hidden="true">
+    <svg viewBox="-22 -22 44 44">
+      <circle class="ring" r="19.5"/>
+      <path class="blob blue"   id="blobBlue"   d="M -5.5 -15 A 16 16 0 0 0 -5.5 15 L -5.5 15 A 12 12 0 0 1 -5.5 -15 Z" fill="#2d9bff" stroke="none"/>
+      <path class="blob orange" id="blobOrange" d="M 5.5 -15 A 16 16 0 0 1 5.5 15 L 5.5 15 A 12 12 0 0 0 5.5 -15 Z" fill="#ff8a1f" stroke="none"/>
+      <path class="arc blue"   d="M -5.5 -15 A 16 16 0 0 0 -5.5 15"/>
+      <path class="arc orange" d="M 5.5 -15 A 16 16 0 0 1 5.5 15"/>
+      <circle class="dot" r="1.7"/>
+    </svg>
   </div>
+  <div id="prompt" data-state="none" role="status">
+    <span data-p="pick"><kbd>E</kbd> Podnieś kostkę</span>
+    <span data-p="held"><kbd>E</kbd> Upuść <i></i> <kbd>Q</kbd> Rzuć</span>
+  </div>
+
+  <div id="levelname"><small id="levelnum"></small><span id="levelnm"></span></div>
+  <div id="stats" aria-label="Statystyki poziomu">
+    <div id="statTime"><small>Czas</small><b>0:00</b></div>
+    <div id="statDeaths"><small>Zgony</small><b>0</b></div>
+  </div>
+  <div id="timers" aria-label="Przyciski czasowe"></div>
+  <div id="legend" aria-hidden="true">
+    <span><kbd>WASD</kbd> ruch</span>
+    <span><kbd>Spacja</kbd> skok</span>
+    <span><kbd>Shift</kbd> bieg</span>
+    <span class="b"><kbd>LPM</kbd> niebieski</span>
+    <span class="o"><kbd>PPM</kbd> pomarańczowy</span>
+    <span><kbd>E</kbd> kostka</span>
+    <span><kbd>R</kbd> restart</span>
+    <span><kbd>H</kbd> wskazówka</span>
+    <span><kbd>Esc</kbd> pauza</span>
+  </div>
+  <div id="toasts" role="status" aria-live="polite"></div>
+  <div id="flash"></div>
 </div>
+
+<!-- karta wstępna poziomu -->
+<div id="intro" role="status" hidden>
+  <div class="intro-tag"></div>
+  <div class="intro-name"></div>
+  <div class="intro-hint"></div>
+</div>
+
+<!-- ekrany pełnoekranowe (tytuł, pauza, wybór poziomu, ustawienia, ukończenie) – ui.js -->
+<div id="screens" hidden></div>
+<div id="notice" role="alert" hidden></div>
+
+<!-- błąd krytyczny (brak WebGL itp.) – wypełnia go game.js lub ui.js -->
+<div id="err" role="alert"></div>
 
 <script type="module" src="./game.js"></script>
+<script type="module" src="./ui.js"></script>
 </body>
 </html>

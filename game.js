@@ -7,6 +7,10 @@ import { audio, gameAudio } from './audio.js';
 const LEVELS = [...allLevels];
 const params = new URLSearchParams(location.search);
 
+// emiter zdarzeń dla interfejsu (ui.js): levelstart, levelcomplete, death, toast, pause, resume, lockerror
+const events = new EventTarget();
+function emit(type, detail = {}) { events.dispatchEvent(new CustomEvent(type, { detail })); }
+
 /* ==========================================================================
    Maceaek – komora testowa z działem portalowym
    WASD + mysz, LPM = niebieski portal, PPM = pomarańczowy portal
@@ -400,7 +404,8 @@ let active = false;       // kursor zablokowany = gra aktywna
 let levelDone = false;
 let levelIndex = 0;
 let levelDef = null;
-let levelTimer = 0;
+let levelTimer = 0;       // czas od ukończenia poziomu (do auto-przejścia)
+let levelTime = 0;        // czas poziomu [s]: nalicza się tylko przy aktywnej grze i nieukończonym poziomie
 
 function overlaps(box, x, y, z) {
   return x - PLAYER_R < box.max.x && x + PLAYER_R > box.min.x &&
@@ -536,6 +541,7 @@ const _fwd = new THREE.Vector3();
 const _upv = new THREE.Vector3();
 
 function physicsStep(dt) {
+  if ((active || game.forceActive) && !levelDone) levelTime += dt;
   // kierunek chodzenia
   let fx = 0, fz = 0;
   if (active || game.forceActive) {
@@ -607,6 +613,7 @@ function physicsStep(dt) {
     gameAudio.acid(player.pos.x, ACID_Y, player.pos.z);
     respawn();
     toast('Kwas! Zaczynasz od nowa');
+    emit('death', { cause: 'acid', deaths: mech.deaths });
   }
 }
 
@@ -893,6 +900,33 @@ function respawnCube(c) {
 function fxCubeTeleport(c) { fx.cubeTeleport(c); }
 function fxCubeReset(c) { fx.cubeReset(c); }
 
+// na co patrzy gracz (podpowiedzi w HUD): ta sama logika co w pickCube (zasięg 3.4 m, bez ściany,
+// bez kostki, na której stoi), ale nic nie podnosi. Zmieniając pickCube, zmień i to.
+const _lkEye = new THREE.Vector3();
+const _lkDir = new THREE.Vector3();
+const _lkHit = new THREE.Vector3();
+const _lkBox = new THREE.Box3();
+const _lkEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+function lookTarget() {
+  if (mech.held || !cubes.length) return null;
+  _lkEye.set(player.pos.x, player.pos.y + EYE_H, player.pos.z);
+  _lkDir.set(0, 0, -1).applyEuler(_lkEuler.set(player.pitch, player.yaw, 0, 'YXZ'));
+  ray.set(_lkEye, _lkDir);
+  ray.far = 3.4;
+  const wall = ray.intersectObjects(solidMeshes(), false)[0];
+  let bestD = wall ? wall.distance : 3.4, found = false;
+  for (const c of cubes) {
+    if (Math.abs(player.pos.y - (c.pos.y + HALF_CUBE)) < 0.12 &&
+        Math.abs(player.pos.x - c.pos.x) < HALF_CUBE + PLAYER_R && Math.abs(player.pos.z - c.pos.z) < HALF_CUBE + PLAYER_R) continue;
+    _lkBox.set(c.dyn.min, c.dyn.max);
+    if (ray.ray.intersectBox(_lkBox, _lkHit)) {
+      const d = _lkHit.distanceTo(_lkEye);
+      if (d < bestD) { found = true; bestD = d; }
+    }
+  }
+  return found ? { type: 'cube', dist: bestD } : null;
+}
+
 // podnoszenie / upuszczanie / rzut
 function pickCube() {
   if (mech.held) return false;
@@ -1097,25 +1131,11 @@ function respawn() {
 }
 
 // ---------------------------------------------------------------- poziomy ----
-const levelNameEl = document.getElementById('levelname');
-const levelGrid = document.getElementById('levels');
 let doneSet = new Set();
 try { doneSet = new Set(JSON.parse(localStorage.getItem('maceaek.done') || '[]')); } catch { /* brak storage */ }
 
 function saveDone() {
   try { localStorage.setItem('maceaek.done', JSON.stringify([...doneSet])); } catch { /* ignoruj */ }
-}
-
-function buildLevelGrid() {
-  levelGrid.innerHTML = '';
-  LEVELS.forEach((lv, i) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'lv' + (i === levelIndex ? ' cur' : '') + (doneSet.has(i) ? ' done' : '');
-    b.innerHTML = `<b>${i + 1}</b><span>${lv.name}</span>`;
-    b.addEventListener('click', (e) => { e.stopPropagation(); loadLevel(i); requestLock(); });
-    levelGrid.appendChild(b);
-  });
 }
 
 function loadLevel(i) {
@@ -1129,11 +1149,12 @@ function loadLevel(i) {
   levelDone = false;
   levelTimer = 0;
   gameAudio.levelStart();
+  levelTime = 0;
+  mech.deaths = 0;
+  mech.cubeResets = 0;
   respawn();
   updateCrosshair();
-  levelNameEl.innerHTML = `<small>Poziom ${levelIndex + 1} / ${LEVELS.length}</small>${levelDef.name}`;
-  toast(levelDef.hint, 6000);
-  buildLevelGrid();
+  emit('levelstart', { index: levelIndex, name: levelDef.name, hint: levelDef.hint });
 }
 
 // kontekst wypalania światła i siatki świata (gfx.bake)
@@ -1158,6 +1179,10 @@ function restartLevel() {
   updateCrosshair();
   levelDone = false;
   levelTimer = 0;
+  levelTime = 0;
+  mech.deaths = 0;
+  mech.cubeResets = 0;
+  emit('levelstart', { index: levelIndex, name: levelDef.name, hint: levelDef.hint, restart: true });
 }
 
 // ---------------------------------------------------------- strzelanie ----
@@ -1312,33 +1337,24 @@ function resetPortals() {
 }
 
 // ------------------------------------------------------------------- HUD ----
-const crosshair = document.getElementById('crosshair');
 const blobBlue = document.getElementById('blobBlue');
 const blobOrange = document.getElementById('blobOrange');
-const hint = document.getElementById('hint');
-const overlay = document.getElementById('overlay');
-const toastEl = document.getElementById('toast');
-let toastTimer = 0;
 
 function updateCrosshair() {
   blobBlue.classList.toggle('on', portals[0].active);
   blobOrange.classList.toggle('on', portals[1].active);
 }
-function toast(msg, ms = 1800) {
-  toastEl.textContent = msg;
-  toastEl.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastEl.classList.remove('show'), ms);
+// komunikat dla gracza – wyświetla go ui.js; kind (opcjonalnie): 'info' | 'warn' | 'success'
+function toast(msg, ms = 1800, kind) {
+  emit('toast', { msg, ms, kind });
 }
 
 function setActive(v) {
-  if (v !== active) audio.play(v ? 'resume' : 'pause');
+  if (v === active) return;
+  audio.play(v ? 'resume' : 'pause');
   active = v;
-  overlay.classList.toggle('hidden', v);
-  crosshair.style.display = v ? 'block' : 'none';
-  hint.style.display = v ? 'block' : 'none';
-  levelNameEl.style.display = v ? 'block' : 'none';
   if (!v) for (const k in keys) keys[k] = false;
+  emit(v ? 'resume' : 'pause');
 }
 
 // ----------------------------------------------------------------- input ----
@@ -1348,20 +1364,17 @@ function requestLock() {
     if (r && r.catch) r.catch(() => {});
   } catch { /* ignoruj */ }
 }
-overlay.addEventListener('click', () => { audio.init(); requestLock(); });
+// pierwszy gest użytkownika odblokowuje dźwięk (audio.init jest bezpieczne przy wielokrotnym wywołaniu)
+document.addEventListener('pointerdown', () => audio.init());
 document.addEventListener('pointerlockchange', () => { audio.init(); setActive(document.pointerLockElement === canvas); });
-document.addEventListener('pointerlockerror', () => {
-  const err = document.getElementById('err');
-  err.style.display = 'block';
-  err.textContent = 'Nie udało się przechwycić kursora – spróbuj kliknąć jeszcze raz.';
-});
+document.addEventListener('pointerlockerror', () => emit('lockerror'));
 
 document.addEventListener('mousemove', (e) => {
   if (!active) return;
   if (Math.abs(e.movementX) > 400 || Math.abs(e.movementY) > 400) return;
-  const s = 0.0022;
+  const s = game.settings.sensitivity;
   player.yaw -= e.movementX * s;
-  player.pitch = THREE.MathUtils.clamp(player.pitch - e.movementY * s, -1.5533, 1.5533);
+  player.pitch = THREE.MathUtils.clamp(player.pitch - e.movementY * s * (game.settings.invertY ? -1 : 1), -1.5533, 1.5533);
 });
 
 document.addEventListener('mousedown', (e) => {
@@ -1387,11 +1400,7 @@ document.addEventListener('keydown', (e) => {
   if ((e.code === 'KeyQ' || e.code === 'KeyF') && !e.repeat && (active || game.forceActive)) {
     if (dropCube(true)) audio.play('cube-throw');
   }
-  if (e.code === 'KeyM' && !e.repeat) {
-    audio.setMuted(!audio.isMuted());
-    toast(audio.isMuted() ? 'Dźwięk wyłączony' : 'Dźwięk włączony', 1200);
-    if (!audio.isMuted()) audio.play('ui-click');
-  }
+  // klawisz M (wyciszenie) obsługuje ui.js razem z ustawieniami
   if ((e.code === 'KeyN' || e.code === 'KeyP') && !e.repeat && (active || game.forceActive)) {
     loadLevel(levelIndex + (e.code === 'KeyN' ? 1 : -1));
   }
@@ -1465,7 +1474,7 @@ function frame() {
   // pole „wyjście”
   if (levelDone) {
     levelTimer += dt;
-    if (levelTimer > 2.6 && !game.manual) loadLevel(levelIndex + 1);
+    if (levelTimer > 2.6 && !game.manual && game.autoNext) loadLevel(levelIndex + 1);
   } else {
     if (exitReached()) {
       levelDone = true;
@@ -1474,7 +1483,7 @@ function frame() {
       doneSet.add(levelIndex);
       saveDone();
       audio.play('level-complete');
-      toast(levelIndex === LEVELS.length - 1 ? 'Gratulacje – ukończyłeś wszystkie poziomy! 🎉' : 'Poziom ukończony!', 2600);
+      emit('levelcomplete', { index: levelIndex, time: levelTime, deaths: mech.deaths, cubeResets: mech.cubeResets });
     }
   }
 
@@ -1511,7 +1520,13 @@ const game = {
   levelIndex: () => levelIndex,
   exitReached,
   cubes, buttons, doors, fizzlers, mech,
-  pickCube, dropCube,
+  pickCube, dropCube, lookTarget,
+  events, doneSet, requestLock,
+  isActive: () => active || game.forceActive,
+  get levelTime() { return levelTime; },
+  settings: { sensitivity: 0.0022, invertY: false },  // ustawiane przez ui.js (rad na piksel myszy)
+  baseFov: 75,       // podstawowe pole widzenia (ustawia ui.js)
+  autoNext: true,    // false = po ukończeniu poziomu nie ładuj następnego sam (ekran ukończenia w ui.js)
   forceActive: false,
   manual: false,     // true = fizyka tylko przez game.step(dt) (testy)
   noRender: false,   // true = bez rysowania (szybkie testy)
