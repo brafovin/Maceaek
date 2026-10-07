@@ -17,7 +17,7 @@ import { DARK_ALL } from './util.js';
 //                   4 m wyżej. Kostka z wysokiego wylotu przelatuje nad komorą (albo wraca na start po lądowaniu na dachu).
 // Kostki nie przechodzą przez drzwi D1, D3 i D4 (kurtyna w świetle drzwi zwraca je na start), więc każda próba ma
 // własne kostki. Przepaści są bezpieczne (dno kilka metrów niżej, schody powrotne po stronie startu) – nic tu nie
-// zabija, a pułapki są odwracalne (z komory wychodzi się przez otwór w podłodze, kostkę z dna przepaści da się odzyskać). Przepaści I
+// zabija, a pułapki są odwracalne (z komory wychodzi się przez otwór w podłodze – kurtyna fizzlera w otworze zabiera wtedy portale, a kostkę zwraca na start). Przepaści I
 // i IV (16,5 i 14,5 m) są szersze od każdego lotu z małą prędkością – także z marszu w portal na płaskiej podłodze i ze
 // sterowaniem w powietrzu – a nad nimi nie ma nic, na czym dałoby się stanąć.
 // Łatki na posadzce (2,5 × 2,5 m) mieszczą tylko jeden portal, więc nie da się zrobić „sprężyny” podłoga-podłoga.
@@ -303,6 +303,7 @@ function buildS4(L) {
   floorWithPatches(L, -14, -0.3, zE, z0, []);
   L.floor(-0.3, 12, zE, z0, 'dark');                       // podłoga komory
   L.box(12, -8, zE, 14, -3, z0, 'dark');                   // otwór w podłodze (dno 3 m niżej)
+  L.fizzler(11.9, -3, zE, 12.1, 5.9, z0);                  // kurtyna w otworze: gracz traci tu portale, kostki nie da się stąd rzucić na przycisk
   safePit(L, -14, 14, zF, zE, 2.7);
   L.box(-14, -8, ROOM_N, 14, S4.up, zF, 'dark');           // lądowisko i strefa wyjścia – 4 m wyżej niż start próby
   edge(L, zF - 0.5, zF, S4.up);
