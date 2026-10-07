@@ -23,7 +23,9 @@
   #hint b{color:#fff}
   #hint .b{color:var(--blue)} #hint .o{color:var(--orange)}
 
-  #toast{position:fixed;left:50%;top:62%;transform:translateX(-50%);padding:8px 16px;border-radius:999px;background:rgba(10,14,20,.72);font-size:15px;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap}
+  #levelname{position:fixed;left:50%;top:14px;transform:translateX(-50%);text-align:center;font-weight:700;font-size:18px;text-shadow:0 1px 4px #000;pointer-events:none;display:none}
+  #levelname small{display:block;font-weight:500;font-size:12px;opacity:.65;letter-spacing:.08em;text-transform:uppercase}
+  #toast{position:fixed;left:50%;top:72%;transform:translateX(-50%);max-width:min(90vw,720px);text-align:center;padding:9px 18px;border-radius:18px;line-height:1.4;background:rgba(10,14,20,.72);font-size:15px;opacity:0;transition:opacity .25s;pointer-events:none}
   #toast.show{opacity:1}
 
   #overlay{position:fixed;inset:0;display:grid;place-items:center;background:radial-gradient(ellipse at center,rgba(15,23,42,.78),rgba(2,6,12,.92));cursor:pointer;padding:16px}
@@ -33,6 +35,13 @@
   #card h1 span{background:linear-gradient(90deg,var(--blue),var(--orange));-webkit-background-clip:text;background-clip:text;color:transparent}
   #card p.sub{margin:0 0 22px;opacity:.65}
   #card .play{display:inline-block;padding:12px 28px;border-radius:999px;background:#f8fafc;color:#0f172a;font-weight:700;font-size:17px}
+  #levels{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:22px 0 0}
+  #levels .lv{all:unset;box-sizing:border-box;cursor:pointer;padding:8px 6px;border-radius:10px;background:#1e293b;border:1px solid #334155;text-align:center;font-size:11px;line-height:1.25;color:#cbd5e1;transition:background .15s,transform .1s}
+  #levels .lv:hover{background:#334155;transform:translateY(-1px)}
+  #levels .lv b{display:block;font-size:18px;color:#fff}
+  #levels .lv span{display:block;opacity:.75;min-height:2.5em}
+  #levels .lv.cur{border-color:#f8fafc}
+  #levels .lv.done b::after{content:" ✓";color:#4ade80;font-size:14px}
   #card table{margin:26px auto 0;border-collapse:collapse;font-size:14px;text-align:left}
   #card td{padding:4px 12px;opacity:.85}
   #card td:first-child{text-align:right;white-space:nowrap}
@@ -54,9 +63,10 @@
   </svg>
 </div>
 
+<div id="levelname"></div>
 <div id="hint">
   <b>WASD</b> ruch · <b>Mysz</b> rozglądanie · <b>Spacja</b> skok · <b>Shift</b> bieg<br>
-  <b class="b">LPM</b> niebieski portal · <b class="o">PPM</b> pomarańczowy portal · <b>R</b> usuń portale · <b>Esc</b> pauza
+  <b class="b">LPM</b> niebieski portal · <b class="o">PPM</b> pomarańczowy portal · <b>R</b> restart poziomu · <b>N</b>/<b>P</b> następny/poprzedni · <b>Esc</b> pauza
 </div>
 <div id="toast"></div>
 
@@ -65,13 +75,14 @@
     <h1><span>Komora testowa</span></h1>
     <p class="sub">Maceaek · prototyp gry z działem portalowym</p>
     <div class="play">Kliknij, aby grać</div>
+    <div id="levels"></div>
     <table>
       <tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></td><td>poruszanie się</td></tr>
       <tr><td>mysz</td><td>patrzenie w kierunku myszy</td></tr>
       <tr><td><kbd>LPM</kbd></td><td><span class="b">niebieski</span> portal</td></tr>
       <tr><td><kbd>PPM</kbd></td><td><span class="o">pomarańczowy</span> portal</td></tr>
       <tr><td><kbd>Spacja</kbd> <kbd>Shift</kbd></td><td>skok · bieg</td></tr>
-      <tr><td><kbd>R</kbd></td><td>usuń portale / wróć na start</td></tr>
+      <tr><td><kbd>R</kbd></td><td>restart poziomu (usuwa portale)</td></tr>
     </table>
     <div id="err"></div>
   </div>
