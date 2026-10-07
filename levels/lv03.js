@@ -14,14 +14,18 @@ export default {
     L.floor(-8, 8, -50, -36);
   },
   solve(T) {
-    T.shoot(1, 0, 0, -18);
-    T.shoot(0, 0, 0, 6);
-    T.walkTo(0, 5); T.run(1, { KeyW: 1 }); T.land();
+    T.shoot(1, 0, 0, -18);                         // pas na wyspie
+    T.shoot(0, 0, 0, 6);                           // tuż przed kwasem
+    T.assert(T.walkThrough(0), 'nie wszedłeś w portal');
+    T.run(0.4, { KeyD: 1 }, null);                 // po wyjściu – na bok, żeby nie wpaść z powrotem
+    T.land();
     // na wyspie: pomarańczowy na drugi brzeg, niebieski na pas wyspy
     T.run(0.05, {});
     T.shoot(1, 0, 0, -39);
     T.shoot(0, 0, 0, -18);
-    T.walkTo(0, -18.6); T.run(1, { KeyW: 1 }); T.land();
+    T.assert(T.walkThrough(0), 'nie wszedłeś w drugi portal');
+    T.run(0.8, { KeyW: 1 }, null);
+    T.land();
     T.walkTo(0, -46);
   },
 };
