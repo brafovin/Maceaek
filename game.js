@@ -1,5 +1,8 @@
 import * as THREE from './vendor/three.module.js';
-import { LEVELS } from './levels.js';
+import allLevels from './levels/index.js';
+
+const LEVELS = [...allLevels];
+const params = new URLSearchParams(location.search);
 
 /* ==========================================================================
    Maceaek – komora testowa z działem portalowym
@@ -95,10 +98,29 @@ const texDark = makeCanvasTexture(256, (g, s) => {
   g.beginPath(); g.moveTo(24, s - 24); g.lineTo(s - 24, 24); g.moveTo(24, 24); g.lineTo(s - 24, s - 24); g.stroke();
 });
 
+const texGrate = makeCanvasTexture(128, (g, s) => {
+  g.clearRect(0, 0, s, s);
+  g.strokeStyle = '#d5dde5'; g.lineWidth = 8;
+  for (let i = 0; i <= 2; i++) {
+    g.beginPath(); g.moveTo(i * s / 2, 0); g.lineTo(i * s / 2, s); g.moveTo(0, i * s / 2); g.lineTo(s, i * s / 2); g.stroke();
+  }
+});
+const texDoor = makeCanvasTexture(256, (g, s) => {
+  g.fillStyle = '#2b3036'; g.fillRect(0, 0, s, s);
+  g.strokeStyle = '#ff9a2e'; g.lineWidth = 14;
+  for (let i = -s; i < s * 2; i += 64) { g.beginPath(); g.moveTo(i, s); g.lineTo(i + s, 0); g.stroke(); }
+  g.fillStyle = 'rgba(20,24,28,.82)'; g.fillRect(24, 24, s - 48, s - 48);
+  g.strokeStyle = '#59606a'; g.lineWidth = 4; g.strokeRect(24, 24, s - 48, s - 48);
+});
+
+// rodzaje powierzchni: portalable = przyjmuje portale, shootThrough = strzał przelatuje (kratka)
 const MATS = {
   white: { mat: new THREE.MeshLambertMaterial({ map: texWhite }), portalable: true, tile: 2 },
   floor: { mat: new THREE.MeshLambertMaterial({ map: texFloor }), portalable: true, tile: 2 },
   dark:  { mat: new THREE.MeshLambertMaterial({ map: texDark }),  portalable: false, tile: 2 },
+  door:  { mat: new THREE.MeshLambertMaterial({ map: texDoor }),  portalable: false, tile: 2 },
+  glass: { mat: new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.2, depthWrite: false }), portalable: false, tile: 2 },
+  grate: { mat: new THREE.MeshBasicMaterial({ map: texGrate, transparent: true, alphaTest: 0.35, side: THREE.DoubleSide }), portalable: false, tile: 1, shootThrough: true },
 };
 
 // ----------------------------------------------------------------- świat ----
@@ -127,7 +149,10 @@ function addBox(x0, y0, z0, x1, y1, z1, kind = 'white') {
   const box = {
     min: new THREE.Vector3(x0, y0, z0),
     max: new THREE.Vector3(x1, y1, z1),
+    kind,
     portalable: m.portalable,
+    shootThrough: !!m.shootThrough,
+    disabled: false,    // otwarte drzwi nie kolidują i nie przyjmują strzałów
   };
   mesh.userData.box = box;
   world.add(mesh);
@@ -148,7 +173,30 @@ const padMat = new THREE.MeshBasicMaterial({ color: 0x4ade80 });
 const padRingMat = new THREE.MeshBasicMaterial({ color: 0xbbf7d0 });
 const WALL_T = 2;
 
-// API dostępne dla definicji poziomów (levels.js)
+function addSign(text, sub, w, h, x, y, z, ry = 0) {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = Math.round(1024 * h / w);
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(20,24,30,.92)'; g.fillRect(0, 0, c.width, c.height);
+  g.strokeStyle = '#ffffff'; g.lineWidth = 8; g.strokeRect(14, 14, c.width - 28, c.height - 28);
+  g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = `700 ${Math.round(c.height * 0.3)}px system-ui, sans-serif`;
+  g.fillText(text, c.width / 2, sub ? c.height * 0.42 : c.height / 2);
+  if (sub) {
+    g.font = `400 ${Math.round(c.height * 0.14)}px system-ui, sans-serif`;
+    g.fillStyle = '#9fb3c8';
+    g.fillText(sub, c.width / 2, c.height * 0.76);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex }));
+  m.position.set(x, y, z);
+  m.rotation.y = ry;
+  return addObject(m);
+}
+
+// API dostępne dla definicji poziomów (levels/*.js)
 const LevelAPI = {
   box: addBox,
   // pokój: podłoga NIE jest tworzona (robi to floor()), ściany od y=-8 do h, sufit, lampy
@@ -168,6 +216,16 @@ const LevelAPI = {
     }
   },
   floor(x0, x1, z0, z1, kind = 'floor') { return addBox(x0, -8, z0, x1, 0, z1, kind); },
+  // kostka (y = wysokość podłoża, na którym leży)
+  cube(x, y, z) { return makeCube(x, y, z); },
+  // przycisk naciskany przez gracza lub kostkę: id, środek (x,z), opcje {y, r, timer}
+  button(id, x, z, o) { return addButton(id, x, z, o); },
+  // drzwi otwierane przez przyciski (ids = id lub tablica), opcje {mode:'all'|'any', invert}
+  door(ids, x0, y0, z0, x1, y1, z1, o) { return addDoor(ids, x0, y0, z0, x1, y1, z1, o); },
+  // fizzler: usuwa portale gracza i niszczy (resetuje) kostki
+  fizzler(x0, y0, z0, x1, y1, z1) { return addFizzler(x0, y0, z0, x1, y1, z1); },
+  // tablica na ścianie (dekoracja)
+  sign(text, sub, w, h, x, y, z, ry = 0) { return addSign(text, sub, w, h, x, y, z, ry); },
   // dół z kwasem – dziurę w podłodze tworzą sąsiednie floor()
   pit(x0, x1, z0, z1) {
     addBox(x0, -8, z0, x1, -6, z1, 'dark');
@@ -184,6 +242,7 @@ function clearLevel() {
   boxes.length = 0;
   for (const o of levelObjects) { scene.remove(o); o.geometry?.dispose(); }
   levelObjects.length = 0;
+  resetMechanics();
   for (const e of effects.splice(0)) { scene.remove(e.mesh); e.mesh.geometry.dispose(); e.mesh.material.dispose(); }
 }
 
@@ -551,7 +610,8 @@ let inFloorHole = false;
 
 function collect(x, y, z, out) {
   out.length = 0;
-  for (const b of boxes) if (overlaps(b, x, y, z) && !boxIgnored(b, x, y, z)) out.push(b);
+  for (const b of boxes) if (!b.disabled && overlaps(b, x, y, z) && !boxIgnored(b, x, y, z)) out.push(b);
+  for (const b of dynBoxes) if (overlaps(b, x, y, z)) out.push(b);
   return out;
 }
 
@@ -707,8 +767,11 @@ function physicsStep(dt) {
   _eye.copy(player.pos); _eye.y += EYE_H;
   tryTeleport(_eyePrev, _eye);
 
+  mechanicsStep(dt);
+
   // kwas
   if (player.pos.y < ACID_Y - 0.4) {
+    mech.deaths++;
     respawn();
     toast('Kwas! Zaczynasz od nowa');
   }
@@ -788,6 +851,412 @@ function teleport(P) {
   player.onGround = false;
   player.camOffset.copy(camWorld).sub(_c.set(player.pos.x, player.pos.y + EYE_H, player.pos.z));
   _eyePrev.set(player.pos.x, player.pos.y + EYE_H, player.pos.z);
+  fixHeldCube();
+}
+
+// ------------------------------------------------------------- mechanika ----
+// Kostki, przyciski, drzwi, fizzlery. Wszystko jest AABB, jak reszta świata.
+const HALF_CUBE = 0.4;
+const HOLD_DIST = 1.9;
+const cubes = [];
+const dynBoxes = [];     // kostki jako bryły kolizji gracza (bez trzymanej)
+const buttons = [];
+const doors = [];
+const fizzlers = [];
+const mech = { held: null, deaths: 0, cubeResets: 0, fizzleCooldown: 0 };
+
+const cubeMat = (() => {
+  const tex = makeCanvasTexture(256, (g, s) => {
+    g.fillStyle = '#8d949c'; g.fillRect(0, 0, s, s);
+    speckle(g, s, 600, 0.08);
+    g.fillStyle = '#b7bec6'; g.fillRect(14, 14, s - 28, s - 28);
+    g.strokeStyle = '#4b525a'; g.lineWidth = 6; g.strokeRect(3, 3, s - 6, s - 6);
+    g.strokeStyle = '#6a727b'; g.lineWidth = 3; g.strokeRect(14, 14, s - 28, s - 28);
+    g.fillStyle = '#ff7ab8';
+    g.beginPath(); g.arc(s / 2, s / 2, 46, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#b7bec6';
+    g.beginPath(); g.arc(s / 2, s / 2, 30, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#ff7ab8';
+    g.beginPath(); g.arc(s / 2, s / 2, 14, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#4b525a';
+    for (const [x, y] of [[26, 26], [s - 26, 26], [26, s - 26], [s - 26, s - 26]]) { g.beginPath(); g.arc(x, y, 5, 0, 7); g.fill(); }
+  });
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  return new THREE.MeshLambertMaterial({ map: tex });
+})();
+
+function makeCube(x, y, z) {
+  const c = {
+    pos: new THREE.Vector3(x, y + HALF_CUBE, z),
+    spawn: new THREE.Vector3(x, y + HALF_CUBE, z),
+    vel: new THREE.Vector3(),
+    held: false,
+    onGround: false,
+    mesh: new THREE.Mesh(new THREE.BoxGeometry(HALF_CUBE * 2, HALF_CUBE * 2, HALF_CUBE * 2), cubeMat),
+    dyn: { min: new THREE.Vector3(), max: new THREE.Vector3(), kind: 'cube', portalable: false, shootThrough: false, disabled: false, isCube: true },
+  };
+  c.dyn.cube = c;
+  c.mesh.position.copy(c.pos);
+  scene.add(c.mesh);
+  levelObjects.push(c.mesh);
+  cubes.push(c);
+  syncCubeBox(c);
+  dynBoxes.push(c.dyn);
+  return c;
+}
+
+function syncCubeBox(c) {
+  c.dyn.min.set(c.pos.x - HALF_CUBE, c.pos.y - HALF_CUBE, c.pos.z - HALF_CUBE);
+  c.dyn.max.set(c.pos.x + HALF_CUBE, c.pos.y + HALF_CUBE, c.pos.z + HALF_CUBE);
+}
+
+function cubeHits(b, x, y, z) {
+  return x - HALF_CUBE < b.max.x && x + HALF_CUBE > b.min.x &&
+         y - HALF_CUBE < b.max.y && y + HALF_CUBE > b.min.y &&
+         z - HALF_CUBE < b.max.z && z + HALF_CUBE > b.min.z;
+}
+
+// ściana-gospodarz jest „dziurawa” dla kostki, gdy jej środek jest w otworze portalu
+const _cc = new THREE.Vector3();
+function cubeBoxIgnored(b, x, y, z) {
+  for (const P of portals) {
+    if (P.host !== b || !P.linked) continue;
+    _cc.set(x, y, z).sub(P.pos);
+    if (_cc.dot(P.normal) < -0.6) continue;
+    const r = _cc.dot(P.right) / (PORTAL_HW * 1.2), u = _cc.dot(P.up) / (PORTAL_HH * 1.1);
+    if (r * r + u * u <= 1) return true;
+  }
+  return false;
+}
+
+function cubeCollect(c, x, y, z, out) {
+  out.length = 0;
+  for (const b of boxes) if (!b.disabled && cubeHits(b, x, y, z) && !cubeBoxIgnored(b, x, y, z)) out.push(b);
+  for (const o of cubes) if (o !== c && !o.held && cubeHits(o.dyn, x, y, z)) out.push(o.dyn);
+  return out;
+}
+
+const _chit = [];
+function cubePushOut(c, b) {
+  const p = c.pos;
+  const opts = [
+    [(p.x + HALF_CUBE) - b.min.x, 'x', -1], [b.max.x - (p.x - HALF_CUBE), 'x', 1],
+    [(p.y + HALF_CUBE) - b.min.y, 'y', -1], [b.max.y - (p.y - HALF_CUBE), 'y', 1],
+    [(p.z + HALF_CUBE) - b.min.z, 'z', -1], [b.max.z - (p.z - HALF_CUBE), 'z', 1],
+  ];
+  let best = opts[0];
+  for (const o of opts) if (o[0] < best[0]) best = o;
+  p[best[1]] += best[2] * (best[0] + EPS);
+  if (Math.sign(c.vel[best[1]]) === -best[2]) c.vel[best[1]] = 0;
+  if (best[1] === 'y' && best[2] > 0) c.onGround = true;
+}
+
+function moveCubeAxis(c, axis, delta) {
+  if (delta === 0) return;
+  const p = c.pos;
+  const px = p.x, py = p.y, pz = p.z;
+  p[axis] += delta;
+  cubeCollect(c, p.x, p.y, p.z, _chit);
+  if (!_chit.length) return;
+  for (let i = _chit.length - 1; i >= 0; i--) {
+    if (cubeHits(_chit[i], px, py, pz)) { cubePushOut(c, _chit[i]); _chit.splice(i, 1); }
+  }
+  if (!_chit.length) return;
+  if (delta > 0) {
+    let lim = Infinity;
+    for (const b of _chit) lim = Math.min(lim, b.min[axis] - HALF_CUBE - EPS);
+    p[axis] = lim;
+  } else {
+    let lim = -Infinity;
+    for (const b of _chit) lim = Math.max(lim, b.max[axis] + HALF_CUBE + EPS);
+    p[axis] = lim;
+    if (axis === 'y') c.onGround = true;
+  }
+  c.vel[axis] = 0;
+}
+
+const _holdT = new THREE.Vector3();
+const _holdD = new THREE.Vector3();
+// docelowe miejsce trzymanej kostki: przed oczami, ale nie za ścianą
+function holdTarget(out) {
+  const eye = _holdD.set(player.pos.x, player.pos.y + EYE_H, player.pos.z);
+  const fwd = _fwd.set(0, 0, -1).applyEuler(_e.set(player.pitch, player.yaw, 0, 'YXZ'));
+  let dist = HOLD_DIST;
+  ray.set(eye, fwd);
+  ray.far = HOLD_DIST + 0.6;
+  const h = ray.intersectObjects(solidMeshes(), false)[0];
+  if (h && !portalAtHit(h)) dist = Math.max(0.9, Math.min(dist, h.distance - 0.55));
+  out.copy(eye).addScaledVector(fwd, dist);
+  out.y -= 0.15;
+  return out;
+}
+
+function stepCube(c, dt) {
+  if (c.held) {
+    const t = holdTarget(_holdT);
+    const old = _p.copy(c.pos);
+    c.onGround = false;
+    c.vel.set(0, 0, 0);
+    moveCubeAxis(c, 'x', t.x - c.pos.x);
+    moveCubeAxis(c, 'y', t.y - c.pos.y);
+    moveCubeAxis(c, 'z', t.z - c.pos.z);
+    c.vel.copy(c.pos).sub(old).multiplyScalar(1 / dt);
+    c.vel.clampLength(0, 14);
+    if (c.pos.distanceTo(t) > 2.8) dropCube(false);
+  } else {
+    const prev = _p.copy(c.pos);
+    c.vel.y = Math.max(c.vel.y - GRAVITY * dt, -55);
+    c.onGround = false;
+    moveCubeAxis(c, 'x', c.vel.x * dt);
+    moveCubeAxis(c, 'z', c.vel.z * dt);
+    moveCubeAxis(c, 'y', c.vel.y * dt);
+    if (c.onGround) { const k = Math.exp(-7 * dt); c.vel.x *= k; c.vel.z *= k; if (Math.hypot(c.vel.x, c.vel.z) < 0.05) { c.vel.x = 0; c.vel.z = 0; } }
+    cubeTeleport(c, prev);
+    if (c.pos.y < ACID_Y - 0.6) respawnCube(c);
+  }
+  syncCubeBox(c);
+}
+
+function cubeTeleport(c, prev) {
+  if (!portals[0].linked) return;
+  for (const P of portals) {
+    const dPrev = _cc.subVectors(prev, P.pos).dot(P.normal);
+    const dNow = _holdD.subVectors(c.pos, P.pos).dot(P.normal);
+    if (dPrev >= 0 && dNow < 0) {
+      const t = dPrev / (dPrev - dNow);
+      _holdT.lerpVectors(prev, c.pos, t).sub(P.pos);
+      const r = _holdT.dot(P.right) / (PORTAL_HW * 1.2), u = _holdT.dot(P.up) / (PORTAL_HH * 1.1);
+      if (r * r + u * u < 1) {
+        const M = transforms[P.index];
+        c.pos.applyMatrix4(M);
+        const sp = c.vel.length();
+        c.vel.transformDirection(M).multiplyScalar(sp);
+        const out = c.vel.dot(P.other.normal);
+        if (out < 2.5) c.vel.addScaledVector(P.other.normal, 2.5 - out);
+        fxCubeTeleport(c);
+        return;
+      }
+    }
+  }
+}
+
+function respawnCube(c) {
+  if (c.held) dropCube(false);
+  c.pos.copy(c.spawn);
+  c.vel.set(0, 0, 0);
+  c.onGround = false;
+  mech.cubeResets++;
+  syncCubeBox(c);
+  fxCubeReset(c);
+}
+
+function fxCubeTeleport() {}
+function fxCubeReset() {}
+
+// podnoszenie / upuszczanie / rzut
+function pickCube() {
+  if (mech.held) return false;
+  const eye = _holdD.set(player.pos.x, player.pos.y + EYE_H, player.pos.z).clone();
+  const dir = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(player.pitch, player.yaw, 0, 'YXZ'));
+  ray.set(eye, dir);
+  ray.far = 3.4;
+  const wall = ray.intersectObjects(solidMeshes(), false)[0];
+  let best = null, bestD = wall ? wall.distance : 3.4;
+  const rr = ray.ray;
+  const hitp = new THREE.Vector3();
+  const bb = new THREE.Box3();
+  for (const c of cubes) {
+    if (Math.abs(player.pos.y - (c.pos.y + HALF_CUBE)) < 0.12 &&
+        Math.abs(player.pos.x - c.pos.x) < HALF_CUBE + PLAYER_R && Math.abs(player.pos.z - c.pos.z) < HALF_CUBE + PLAYER_R) continue; // stoisz na niej
+    bb.set(c.dyn.min, c.dyn.max);
+    if (rr.intersectBox(bb, hitp)) {
+      const d = hitp.distanceTo(eye);
+      if (d < bestD) { best = c; bestD = d; }
+    }
+  }
+  if (!best) return false;
+  best.held = true;
+  mech.held = best;
+  best.vel.set(0, 0, 0);
+  dynBoxes.splice(dynBoxes.indexOf(best.dyn), 1);
+  return true;
+}
+
+function dropCube(throwIt) {
+  const c = mech.held;
+  if (!c) return false;
+  c.held = false;
+  mech.held = null;
+  dynBoxes.push(c.dyn);
+  if (throwIt) {
+    const dir = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(player.pitch, player.yaw, 0, 'YXZ'));
+    c.vel.copy(dir).multiplyScalar(13).add(new THREE.Vector3(0, 1.5, 0)).addScaledVector(player.vel, 0.6);
+  } else {
+    c.vel.multiplyScalar(0.5);
+  }
+  return true;
+}
+
+// po teleportacji gracza trzymana kostka ląduje przed nim
+function fixHeldCube() {
+  const c = mech.held;
+  if (!c) return;
+  holdTarget(c.pos);
+  c.vel.set(0, 0, 0);
+  syncCubeBox(c);
+}
+
+// ---- przyciski i drzwi ----
+function addButton(id, x, z, o = {}) {
+  const y = o.y ?? 0;
+  const r = o.r ?? 0.95;
+  const group = new THREE.Group();
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(r + 0.18, r + 0.22, 0.05, 40), new THREE.MeshLambertMaterial({ color: 0x3a4047 }));
+  base.position.y = 0.02;
+  const plateMat = new THREE.MeshBasicMaterial({ color: 0xe5484d });
+  const plate = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.06, 40), plateMat);
+  plate.position.y = 0.035;
+  group.add(base, plate);
+  group.position.set(x, y, z);
+  scene.add(group);
+  levelObjects.push(group);
+  const b = { id, x, y, z, r, timer: o.timer || 0, plate, plateMat, pressed: false, hold: 0 };
+  buttons.push(b);
+  return b;
+}
+
+function addDoor(ids, x0, y0, z0, x1, y1, z1, o = {}) {
+  const box = addBox(x0, y0, z0, x1, y1, z1, 'door');
+  const mesh = worldMeshes[worldMeshes.length - 1];
+  const d = { ids: Array.isArray(ids) ? ids : [ids], mode: o.mode || 'all', box, mesh, open: 0, height: y1 - y0, invert: !!o.invert };
+  doors.push(d);
+  return d;
+}
+
+function addFizzler(x0, y0, z0, x1, y1, z1) {
+  // cienki wolumen jest pogrubiany, żeby szybki gracz nie „przeskoczył” fizzlera
+  const thin = (x1 - x0) < (z1 - z0) ? 'x' : 'z';
+  const lo = thin === 'x' ? x0 : z0, hi = thin === 'x' ? x1 : z1;
+  const gx0 = thin === 'x' ? Math.min(x0, (x0 + x1) / 2 - 0.35) : x0, gx1 = thin === 'x' ? Math.max(x1, (x0 + x1) / 2 + 0.35) : x1;
+  const gz0 = thin === 'z' ? Math.min(z0, (z0 + z1) / 2 - 0.35) : z0, gz1 = thin === 'z' ? Math.max(z1, (z0 + z1) / 2 + 0.35) : z1;
+  void lo; void hi;
+  const w = Math.max(x1 - x0, z1 - z0), h = y1 - y0;
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    uniforms: { uTime: { value: 0 }, uAspect: { value: w / h } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+    fragmentShader: `varying vec2 vUv; uniform float uTime; uniform float uAspect;
+      void main(){
+        float y = vUv.y * 10.0 - uTime * 2.0;
+        float x = vUv.x * uAspect * 6.0;
+        float a = 0.16 + 0.18 * sin(y * 3.0 + sin(x * 1.7 + uTime * 3.0) * 2.0);
+        a += 0.22 * smoothstep(0.92, 1.0, abs(vUv.x - 0.5) * 2.0 + 0.0);
+        float edge = smoothstep(0.0, 0.08, vUv.y) * smoothstep(1.0, 0.92, vUv.y);
+        gl_FragColor = vec4(0.45, 0.78, 1.0, a * edge);
+        #include <colorspace_fragment>
+      }`,
+  });
+  const alongX = (x1 - x0) >= (z1 - z0);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+  mesh.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+  if (!alongX) mesh.rotation.y = Math.PI / 2;
+  scene.add(mesh);
+  levelObjects.push(mesh);
+  const f = { min: new THREE.Vector3(gx0, y0, gz0), max: new THREE.Vector3(gx1, y1, gz1), mesh, mat };
+  fizzlers.push(f);
+  return f;
+}
+
+function buttonPressedNow(b) {
+  // gracz
+  if (Math.hypot(player.pos.x - b.x, player.pos.z - b.z) < b.r * 0.9 && Math.abs(player.pos.y - b.y) < 0.15 && player.onGround) return true;
+  // kostki
+  for (const c of cubes) {
+    if (c.held) continue;
+    if (Math.hypot(c.pos.x - b.x, c.pos.z - b.z) < b.r + 0.1 && Math.abs((c.pos.y - HALF_CUBE) - b.y) < 0.15) return true;
+  }
+  return false;
+}
+
+function playerInBox(min, max) {
+  const p = player.pos;
+  return p.x + PLAYER_R > min.x && p.x - PLAYER_R < max.x && p.y + PLAYER_H > min.y && p.y < max.y && p.z + PLAYER_R > min.z && p.z - PLAYER_R < max.z;
+}
+
+function mechanicsStep(dt) {
+  for (const c of cubes) stepCube(c, dt);
+
+  // przyciski
+  const state = Object.create(null);
+  for (const b of buttons) {
+    const now = buttonPressedNow(b);
+    if (now) b.hold = b.timer;
+    else b.hold = Math.max(0, b.hold - dt);
+    const on = now || b.hold > 0;
+    if (on !== b.pressed) { b.pressed = on; mechEvent(on ? 'button-on' : 'button-off', b); }
+    state[b.id] = (state[b.id] || false) || on;
+  }
+
+  // drzwi
+  for (const d of doors) {
+    const vals = d.ids.map(id => !!state[id]);
+    let want = d.mode === 'any' ? vals.some(Boolean) : vals.every(Boolean);
+    if (d.invert) want = !want;
+    if (want && !d.box.disabled) { d.box.disabled = true; mechEvent('door-open', d); }
+    else if (!want && d.box.disabled) {
+      // nie zamykaj drzwi na kimś / na kostce
+      let blocked = playerInBox(d.box.min, d.box.max);
+      for (const c of cubes) if (cubeHits(d.box, c.pos.x, c.pos.y, c.pos.z)) blocked = true;
+      if (!blocked) { d.box.disabled = false; mechEvent('door-close', d); }
+    }
+  }
+
+  // fizzlery
+  mech.fizzleCooldown = Math.max(0, mech.fizzleCooldown - dt);
+  for (const f of fizzlers) {
+    if (mech.fizzleCooldown <= 0 && playerInBox(f.min, f.max) && (portals[0].active || portals[1].active)) {
+      resetPortals();
+      mech.fizzleCooldown = 0.6;
+      toast('Fizzler usunął portale');
+      mechEvent('fizzle', f);
+    }
+    for (const c of cubes) if (cubeHits(f, c.pos.x, c.pos.y, c.pos.z)) { respawnCube(c); mechEvent('fizzle', f); }
+  }
+}
+
+function mechEvent(type, obj) { /* haczyk dla efektów i dźwięku */ void type; void obj; }
+
+function mechanicsVisuals(dt) {
+  for (const b of buttons) {
+    b.plate.position.y = b.pressed ? 0.005 : 0.035;
+    b.plateMat.color.set(b.pressed ? 0x37d67a : 0xe5484d);
+  }
+  for (const d of doors) {
+    const target = d.box.disabled ? 1 : 0;
+    d.open += (target - d.open) * Math.min(1, dt * 8);
+    d.mesh.position.y = d.open * (d.height + 0.05);
+    d.mesh.visible = d.open < 0.985;
+  }
+  for (const f of fizzlers) f.mat.uniforms.uTime.value = time;
+}
+
+function resetMechanics() {
+  for (const c of cubes) { c.mesh.geometry.dispose(); }
+  cubes.length = 0;
+  dynBoxes.length = 0;
+  buttons.length = 0;
+  doors.length = 0;
+  for (const f of fizzlers) { f.mesh.geometry.dispose(); f.mat.dispose(); }
+  fizzlers.length = 0;
+  mech.held = null;
+  mech.fizzleCooldown = 0;
+}
+
+function restartMechanics() {
+  if (mech.held) dropCube(false);
+  for (const c of cubes) { c.pos.copy(c.spawn); c.vel.set(0, 0, 0); c.onGround = false; syncCubeBox(c); c.mesh.position.copy(c.pos); }
+  for (const b of buttons) { b.pressed = false; b.hold = 0; }
+  for (const d of doors) { d.box.disabled = false; d.open = 0; d.mesh.position.y = 0; d.mesh.visible = true; }
 }
 
 function respawn() {
@@ -846,8 +1315,14 @@ function loadLevel(i) {
   buildLevelGrid();
 }
 
+function exitReached() {
+  const ex = levelDef.exit;
+  return player.onGround && Math.hypot(player.pos.x - ex.x, player.pos.z - ex.z) < 1.8 && Math.abs(player.pos.y - ex.y) < 0.3;
+}
+
 function restartLevel() {
   portals.forEach(p => p.clear());
+  restartMechanics();
   respawn();
   updateCrosshair();
   levelDone = false;
@@ -859,23 +1334,62 @@ const ray = new THREE.Raycaster();
 const _ctr = new THREE.Vector2(0, 0);
 const AXES = ['x', 'y', 'z'];
 
+// powierzchnie, które zatrzymują strzał (bez otwartych drzwi i kratek)
+function shotMeshes() {
+  return worldMeshes.filter(m => { const b = m.userData.box; return !b.disabled && !b.shootThrough; });
+}
+// powierzchnie litej kolizji (do trzymania kostki): kratki też blokują
+function solidMeshes() {
+  return worldMeshes.filter(m => !m.userData.box.disabled);
+}
+
+// czy punkt trafienia leży w otworze aktywnego portalu (strzał wtedy przelatuje na drugą stronę)
+function portalAtHit(h) {
+  const box = h.object.userData.box;
+  for (const P of portals) {
+    if (!P.linked || P.host !== box || !h.face || h.face.normal.dot(P.normal) < 0.99) continue;
+    _c.copy(h.point).sub(P.pos);
+    const r = _c.dot(P.right) / PORTAL_HW, u = _c.dot(P.up) / PORTAL_HH;
+    if (r * r + u * u < 1.0) return P;
+  }
+  return null;
+}
+
+// promień strzału: przechodzi przez portale (do 4 razy)
+function traceShot(origin, dir) {
+  const segs = [];
+  const o = origin.clone(), d = dir.clone();
+  const targets = shotMeshes();
+  for (let hop = 0; hop < 5; hop++) {
+    ray.set(o, d);
+    ray.far = 160;
+    const h = ray.intersectObjects(targets, false)[0];
+    if (!h) { segs.push([o.clone(), o.clone().addScaledVector(d, 60)]); return { hit: null, segs, dir: d }; }
+    segs.push([o.clone(), h.point.clone()]);
+    const P = portalAtHit(h);
+    if (!P) return { hit: h, segs, dir: d };
+    const M = transforms[P.index];
+    o.copy(h.point).applyMatrix4(M);
+    d.transformDirection(M);
+    o.addScaledVector(d, 0.02);
+  }
+  return { hit: null, segs, dir: d };
+}
+
 function fire(index) {
   gunKick = 1;
   gunTarget.set(COLORS[index]);
   updateCamera();
-  ray.setFromCamera(_ctr, camera);
-  ray.far = 120;
-  const hits = ray.intersectObjects(worldMeshes, false);
+  const dir0 = camera.getWorldDirection(new THREE.Vector3());
+  const tr = traceShot(camera.position, dir0);
 
   const muzzle = new THREE.Vector3(0.13, -0.12, -0.55).applyMatrix4(camera.matrixWorld);
-  if (!hits.length) {
-    spawnBeam(muzzle, ray.ray.at(60, new THREE.Vector3()), COLORS[index]);
-    return false;
-  }
-  const hit = hits[0];
+  tr.segs[0][0] = muzzle;
+  for (const [a, b2] of tr.segs) spawnBeam(a, b2, COLORS[index]);
+  if (!tr.hit) return false;
+  const hit = tr.hit;
   const box = hit.object.userData.box;
   const normal = hit.face.normal.clone();
-  spawnBeam(muzzle, hit.point, COLORS[index]);
 
   if (!box.portalable) {
     spawnRing(hit.point, normal, 0x9aa4ae);
@@ -886,7 +1400,7 @@ function fire(index) {
   // układ współrzędnych portalu
   const up = new THREE.Vector3();
   if (Math.abs(normal.y) > 0.5) {
-    camera.getWorldDirection(_fwd);
+    _fwd.copy(tr.dir);
     if (Math.abs(_fwd.x) > Math.abs(_fwd.z)) up.set(Math.sign(_fwd.x), 0, 0);
     else up.set(0, 0, Math.sign(_fwd.z) || -1);
     if (normal.y < 0) up.negate();
@@ -914,7 +1428,7 @@ function fire(index) {
   if (nAxis !== 'y') {
     const origin = new THREE.Vector3(pos.x, pos.y - PORTAL_HH + 0.05, pos.z).addScaledVector(normal, 0.35);
     const down = new THREE.Raycaster(origin, new THREE.Vector3(0, -1, 0), 0, 1.3);
-    const g = down.intersectObjects(worldMeshes, false)[0];
+    const g = down.intersectObjects(solidMeshes(), false)[0];
     if (g) {
       const lo = box.min.y + ext.y;
       pos.y = Math.max(lo, pos.y - (g.distance - 0.05));
@@ -923,7 +1437,7 @@ function fire(index) {
 
   // czy tuż przed portalem jest wolne miejsce (np. półka albo schody przy samej ścianie)
   for (const b of boxes) {
-    if (b === box) continue;
+    if (b === box || b.disabled) continue;
     let hitAll = true;
     for (const a of AXES) {
       let lo, hi;
@@ -1034,6 +1548,10 @@ document.addEventListener('keydown', (e) => {
     restartLevel();
     toast('Poziom zaczęty od nowa');
   }
+  if (e.code === 'KeyE' && !e.repeat && (active || game.forceActive)) {
+    if (mech.held) dropCube(false); else if (!pickCube()) toast('Nie ma czego podnieść', 900);
+  }
+  if ((e.code === 'KeyQ' || e.code === 'KeyF') && !e.repeat && (active || game.forceActive)) dropCube(true);
   if ((e.code === 'KeyN' || e.code === 'KeyP') && !e.repeat && (active || game.forceActive)) {
     loadLevel(levelIndex + (e.code === 'KeyN' ? 1 : -1));
   }
@@ -1101,10 +1619,9 @@ function frame() {
   // pole „wyjście”
   if (levelDone) {
     levelTimer += dt;
-    if (levelTimer > 2.6) loadLevel(levelIndex + 1);
+    if (levelTimer > 2.6 && !game.manual) loadLevel(levelIndex + 1);
   } else {
-    const ex = levelDef.exit;
-    if (player.onGround && Math.hypot(player.pos.x - ex.x, player.pos.z - ex.z) < 1.8 && Math.abs(player.pos.y - ex.y) < 0.3) {
+    if (exitReached()) {
       levelDone = true;
       levelTimer = 0;
       doneSet.add(levelIndex);
@@ -1123,10 +1640,12 @@ function frame() {
     }
   }
   updateEffects(dt);
+  mechanicsVisuals(dt);
   updateCamera(dt);
   updateGun(dt);
 
   refreshTransforms();
+  if (game.noRender) return;
   renderView(camera, 0, null);
 
   // pistolet na wierzchu
@@ -1142,13 +1661,37 @@ const game = {
   fire, resetPortals, respawn, setActive, keys, loadLevel, restartLevel, LEVELS,
   get levelDone() { return levelDone; },
   levelIndex: () => levelIndex,
+  exitReached,
+  cubes, buttons, doors, fizzlers, mech,
+  pickCube, dropCube,
   forceActive: false,
-  manual: false,
+  manual: false,     // true = fizyka tylko przez game.step(dt) (testy)
+  noRender: false,   // true = bez rysowania (szybkie testy)
   step: physicsStep,
   rtCache, vcams, transforms,
 };
 window.game = game;
 
-updateCrosshair();
-loadLevel(Number(new URLSearchParams(location.search).get('level') || 1) - 1);
-frame();
+async function boot() {
+  // ?lvmod=/levels/lv11.js – wczytaj tylko jeden poziom z podanego modułu (do testów)
+  const lvmod = params.get('lvmod');
+  if (lvmod) {
+    const m = await import(lvmod);
+    LEVELS.length = 0;
+    LEVELS.push(m.default);
+  }
+  // ?test=1 – tryb testowy: ręczna fizyka, bez rysowania (chyba że ?render=1), zestaw T
+  if (params.get('test')) {
+    game.manual = true;
+    game.noRender = !params.get('render');
+    game.forceActive = true;
+    setActive(true);
+    const kit = await import('./testkit.js');
+    window.T = kit.install(game);
+  }
+  updateCrosshair();
+  loadLevel(Number(params.get('level') || 1) - 1);
+  frame();
+  window.gameReady = true;
+}
+boot();
