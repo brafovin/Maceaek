@@ -396,6 +396,7 @@ const player = {
   yaw: 0,
   pitch: 0,
   roll: 0,
+  airUp: false,                   // po wylocie z podłogi, do pierwszego kontaktu z ziemią (patrz teleport)
   camOffset: new THREE.Vector3(), // wygładza „przeskok” kamery po teleportacji
 };
 
@@ -571,9 +572,16 @@ function physicsStep(dt) {
       audio.play('jump');
     }
   } else if (wishLen > 0) {
+    // sterowanie w powietrzu nie może rozpędzać ponad bieg (strafowanie w stylu Quake'a dawałoby nieograniczony pęd);
+    // prędkość z portali (większa niż bieg) jest zachowana
+    const before = Math.hypot(player.vel.x, player.vel.z);
     accelerate(_wish, speed, 2.5, dt);
+    const after = Math.hypot(player.vel.x, player.vel.z);
+    const cap = Math.max(before, RUN);
+    if (after > cap) { const k = cap / after; player.vel.x *= k; player.vel.z *= k; }
   }
 
+  if (player.onGround) player.airUp = false;
   player.vel.y = Math.max(player.vel.y - GRAVITY * dt, -55);
 
   _eyePrev.copy(player.pos); _eyePrev.y += EYE_H;
@@ -649,6 +657,19 @@ function teleport(P) {
   const speed = player.vel.length();
   gameAudio.teleport(speed);
   player.vel.transformDirection(M).multiplyScalar(speed);
+  // Wylot z podłogi stawia stopy na płaszczyźnie portalu, choć wejście nastąpiło, gdy oczy przekroczyły płaszczyznę
+  // (stopy ~1.6 m niżej) – to jednorazowy „bonus” wysokości. Bez ziemi pomiędzy kolejnymi wylotami z podłogi
+  // (pętla podłoga-podłoga) bonus nie przysługuje, inaczej każdy obieg dodawałby 1.6 m (pompa energii).
+  if (O.normal.y > 0.5) {
+    if (player.airUp) {
+      const vn = player.vel.dot(O.normal);
+      if (vn > 0) {
+        const vn2 = Math.max(0, vn * vn - 2 * GRAVITY * (EYE_H - NEAR));
+        player.vel.addScaledVector(O.normal, Math.sqrt(vn2) - vn);
+      }
+    }
+    player.airUp = true;
+  }
   const out = player.vel.dot(O.normal);
   if (out < PORTAL_MIN_EXIT) player.vel.addScaledVector(O.normal, PORTAL_MIN_EXIT - out);
 

@@ -40,14 +40,14 @@ export default {
 * `L.floor(x0, x1, z0, z1, kind='floor')` – płyta podłogi, górna ściana na y=0 (grubość 8). Kilka płyt obok siebie = podłoga z dziurami.
 * `L.pit(x0, x1, z0, z1)` – dno (ciemne, y=-6) i kwas (y=-5). **Dziurę w podłodze tworzą sąsiednie `floor()`** – `pit()` tylko ją wypełnia. Kwas zabija (gracz wraca na start, portale zostają).
 * `L.box(x0,y0,z0,x1,y1,z1, kind)` – dowolna bryła. Rodzaje (`kind`):
-  * `white`, `floor` – przyjmują portale; `dark` – nie przyjmuje; `door` – ciemne z pomarańczowymi pasami (tylko dla `L.door`);
+  * `white`, `floor` – przyjmują portale; `dark` – nie przyjmuje; `door` – ciemne z pomarańczowymi pasami (dla `L.door`; jako zwykła bryła `L.box(…,'door')` to ozdobny, nieportalowalny, nieprzepuszczający strzału element);
   * `glass` – szkło: kolizja, widać przez nie, **blokuje strzał**, nie przyjmuje portali;
   * `grate` – kratka: kolizja, widać przez nią, **strzał przelatuje**, nie przyjmuje portali. Najlepiej cienka (0.3).
 * `L.cube(x, y, z)` – kostka (0.8 m); `y` = wysokość podłoża pod nią. Dodawaj po podłodze/platformach, na których leży.
 * `L.button(id, x, z, {y=0, r=0.95, timer=0})` – przycisk w podłodze; wciska go gracz stojący na nim albo kostka leżąca na nim. `timer` > 0: po zwolnieniu zostaje wciśnięty jeszcze `timer` sekund.
 * `L.door(ids, x0,y0,z0,x1,y1,z1, {mode:'all'|'any', invert})` – drzwi (bryła) otwierane przyciskami; `ids` = id lub tablica; `all` (domyślnie) = wszystkie wciśnięte; `invert` = otwarte, gdy NIE wciśnięte. Drzwi nie zamykają się na graczu ani kostce. Zamknięte drzwi nie przyjmują portali.
 * `L.fizzler(x0,y0,z0,x1,y1,z1)` – świetlna kurtyna: gracz, który ją przetnie, traci oba portale; kostka, która ją dotknie, wraca na miejsce startu. Jedna z poziomych wymiarów powinna być cienka (kurtyna jest pogrubiana do 0.7 m).
-* `L.sign(text, sub, w, h, x, y, z, ry)` – tablica na ścianie (dekoracja); `ry` obrót wokół y (`0` patrzy na +z, `Math.PI` na -z, `-Math.PI/2` na +x, `Math.PI/2` na -x).
+* `L.sign(text, sub, w, h, x, y, z, ry)` – tablica na ścianie (dekoracja); `ry` obrót wokół y (`0` patrzy na +z, `Math.PI` na -z, `Math.PI/2` na +x, `-Math.PI/2` na -x; tablica na ścianie wschodniej musi patrzeć na -x, czyli `-Math.PI/2`).
 * `stairs(L, x0, x1, zEnd, top, depth)` z `levels/util.js` – schody po 0.5 m wznoszące się w stronę `-z`.
 
 Wskazówki budowy:
@@ -79,6 +79,8 @@ Wskazówki budowy:
 * Wejście: wystarczy, że **środek ciała** (oś) jest w owalu powiększonym o ~30% (łatwo trafić), a oczy przekroczą płaszczyznę portalu od przodu. Portal na ścianie: ściana-gospodarz jest „dziurawa” dla gracza tylko w otworze.
 * Podłoga/sufit: wpadasz, gdy środek jest nad otworem; poziomy pęd jest tłumiony, żeby nie „przebiegać” dziury bokiem.
 * **Wylot**: pęd (prędkość) jest obracany tak jak portal; składowa wzdłuż normalnej wyjścia jest co najmniej **3.5 m/s** (żeby zawsze wylecieć). Przy wejściu w portal ze „spadania” prędkość = √(2·24·h) – i to jest główne źródło energii w łamigłówkach. Kierunek poziomy: składowa wzdłuż osi „up” portalu jest zachowana, składowa wzdłuż „right” odwracana → **jeśli oba portale mają tę samą oś „up”, kierunek ruchu wzdłuż niej się zachowuje**.
+* **Energia.** Wejście w podłogę następuje, gdy oczy przekroczą płaszczyznę (stopy ~1.6 m niżej), a wylot z podłogi stawia stopy na płaszczyźnie – to daje jednorazowy bonus ≈ 1.6 m wysokości na „odbicie” (np. start ze stania: wylot na 1.6 m). Bonus przysługuje raz między kontaktami z ziemią: kolejne wyloty z podłogi (pętla podłoga↔podłoga w powietrzu) tracą 2·g·1.59 energii, więc pętla nie pompuje wysokości. Poziomy „windy” (cykl: stanie → skok w dół → wylot z podłogi wyżej) liczą na ten jeden bonus – po każdym lądowaniu na twardym podłożu znów przysługuje.
+* **Sterowanie w powietrzu** nie rozpędza ponad bieg (10 m/s); prędkość z portali większa niż 10 m/s jest zachowana (strafowanie nie daje nieograniczonego pędu).
 * Widok: kamera obraca się razem z portalem, przechył (roll) wygasa w ~0.3 s. Po teleportacji kamera chwilę „dojeżdża” (camOffset) – dlatego w testach po `T.shoot` zerujemy offset (`T.aim` to robi).
 * Portale nie znikają same – tylko przez `R` (restart), fizzler, albo przestawienie.
 

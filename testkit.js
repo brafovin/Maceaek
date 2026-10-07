@@ -87,7 +87,9 @@ export function install(game) {
         pl.yaw = Math.atan2(-dx, -dz);
         const sp = Math.hypot(pl.vel.x, pl.vel.z);
         game.keys.KeyW = sp < 1.5 || Math.hypot(dx, dz) > 1;
+        const before = pl.pos.clone();
         game.step(DT);
+        if (pl.pos.distanceTo(before) > 2) break;      // wpadłeś w portal – koniec
       }
       T.release();
       return T.st();
