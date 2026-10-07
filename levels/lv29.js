@@ -13,8 +13,10 @@ import { DARK_ALL } from './util.js';
 //                   przejdzie, a gracz leci nad nią na pędzie z portalu i traci portale.
 // Kostki nie przechodzą przez drzwi D3 i D4 (kurtyna w świetle drzwi zwraca je na start), więc każda próba ma
 // własne kostki. Przepaści są bezpieczne (dno kilka metrów niżej, schody powrotne po stronie startu) – nic tu nie
-// zabija, a pułapki są odwracalne. Przepaści I i IV są szersze od każdego lotu z małą prędkością (także z pętlą
-// pionowego wylotu i sterowaniem w powietrzu), a stać na ich krawędziach nie ma na czym: nad nimi nie ma belek.
+// zabija, a pułapki są odwracalne. Przepaści I i IV (16,5 i 16 m) są szersze od każdego lotu z małą prędkością – także
+// z marszu w portal na płaskiej podłodze i ze sterowaniem w powietrzu – a nad nimi nie ma nic, na czym dałoby się stanąć.
+// Łatki na posadzce (2,5 × 2,5 m) mieszczą tylko jeden portal, więc nie da się zrobić „sprężyny” podłoga-podłoga.
+// Przejście wymaga lotu z wysokości wieży (25 m/s) z portalu umieszczonego w górnej części białego pasa (środek >= ok. 8,5 m).
 const H = 24;
 
 // podłoga z białymi łatkami na ciemnym tle (łatki: [x0,x1,z0,z1], nie nachodzą na siebie)
@@ -48,7 +50,7 @@ function roof(L, zNear, zFar) {
 
 // poręcz z kratki wzdłuż schodów (kroki co 0,5 m, głębokość stopnia d, szczyt schodów przy zTop): sekcje o długości `sec`,
 // każda sięga `gap` ponad najwyższy stopień pod nią – nie da się z niej wyskoczyć w bok ani przeskoczyć
-function stairRail(L, xa, xb, zA, zB, zTop, d, top, gap = 1.9, sec = 1.6) {
+function stairRail(L, xa, xb, zA, zB, zTop, d, top, gap = 1.9, sec = 3.2) {
   for (let z = zA; z < zB - 1e-6; z += sec) {
     const z2 = Math.min(z + sec, zB);
     const h = top - 0.5 * Math.floor((z - zTop + 1e-6) / d);
@@ -104,8 +106,8 @@ export default {
     // ===== S1: wyrzut z wieży =====
     const s1 = S1;
     T.walkTo(-8, s1.zN + 1.2, 10);                   // na pasek między przepaścią a wieżą
-    T.walkTo(5, s1.zN + 1.2, 8);
-    T.shoot(1, 5, 11.2, s1.z0 - 0.2);               // wylot: jak najwyżej na białym pasie północnej ściany wieży
+    T.walkTo(5, s1.zN + 0.7, 8);
+    T.shoot(1, 5, 10.2, s1.z0 - 0.3);               // wylot: jak najwyżej na białym pasie północnej ściany wieży
     T.walkTo(-8, s1.zN + 1.2, 8); T.walkTo(-8, s1.roomS - 1.7, 10); T.walkTo(5, s1.roomS - 1.7, 8);
     T.shoot(0, 5, 0, (s1.pz0 + s1.pz1) / 2);         // wejście: biała łatka na posadzce przed wieżą
     T.walkTo(0, s1.roomS - 1.6, 10); T.face(0, 0);
