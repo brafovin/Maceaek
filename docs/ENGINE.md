@@ -96,6 +96,13 @@ Wywołanie: `node tests/run.mjs --lvmod /levels/lv12.js` (jeden poziom z pliku, 
 Opcje: `-v` (szczegóły), `--jitter 0.1 --seeds 5` (szum celowania; wymagane ≥ 4/5), `--render` (z renderowaniem, wolniej).
 Uruchomienie ręczne z podglądem: `http://localhost:8123/index.html?test=1&render=1&lvmod=/levels/lv12.js` (w skrypcie Playwright: ekran przez `page.screenshot`).
 
+Szybkie eksperymenty (szukanie obejść, próby rozwiązań) – `tests/try.mjs`:
+`node tests/try.mjs --lvmod /levels/lv12.js moj.js [--jitter 0.1 --seed 3]`, gdzie `moj.js` zawiera jedną funkcję `(T) => { …; return T.st(); }`;
+wypisuje zwróconą wartość, czy wyjście osiągnięte, liczbę śmierci i resetów kostek.
+Zrzuty ekranu (z renderowaniem) – `tests/shot.mjs`:
+`node tests/shot.mjs --lvmod /levels/lv12.js --pos 0,0,12 --yaw 0 --pitch -0.1 --out /tmp/a.png [--setup skrypt.js]`
+(`--pos` = pozycja stóp; `--setup` – opcjonalna funkcja `(T)=>{…}` wykonywana przed zrzutem, np. postawienie portali; można powtórzyć `--pos/--yaw/--pitch/--out` dla wielu ujęć). Obraz obejrzyj narzędziem Read.
+
 Przy `?test=1` fizyka jest krokowana ręcznie (`game.step`, krok 1/120 s), więc **nic nie dzieje się „samo”** – czas płynie tylko w `T.run/T.wait/T.land/T.walkTo…`.
 
 ### `T` – pomocniki
