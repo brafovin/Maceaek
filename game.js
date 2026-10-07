@@ -145,6 +145,7 @@ function addSign(text, sub, w, h, x, y, z, ry = 0) {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex }));
   m.position.set(x, y, z);
   m.rotation.y = ry;
+  m.userData.sign = true;
   return addObject(m);
 }
 
@@ -1184,6 +1185,7 @@ function loadLevel(i) {
   clearLevel();
   portals.forEach(p => p.clear(true));
   levelDef.build(LevelAPI);
+  fixSigns();
   gfx.bake(bakeContext());
   fx.makePad(levelDef.exit);
   levelDone = false;
@@ -1205,6 +1207,16 @@ function bakeContext() {
     add: addObject,
     remove(o) { scene.remove(o); const i = levelObjects.indexOf(o); if (i >= 0) levelObjects.splice(i, 1); },
   };
+}
+
+// tablice są jednostronne: jeśli któraś patrzy w głąb bryły (zła strona), obróć ją o 180° – autor poziomu nie musi pilnować kierunku
+function fixSigns() {
+  const inside = (x, y, z) => boxes.some(b => x > b.min.x && x < b.max.x && y > b.min.y && y < b.max.y && z > b.min.z && z < b.max.z);
+  for (const m of levelObjects) {
+    if (!m.userData.sign) continue;
+    const a = m.rotation.y, nx = Math.sin(a), nz = Math.cos(a), p = m.position;
+    if (inside(p.x + nx * 0.2, p.y, p.z + nz * 0.2) && !inside(p.x - nx * 0.2, p.y, p.z - nz * 0.2)) m.rotation.y = a + Math.PI;
+  }
 }
 
 function exitReached() {
