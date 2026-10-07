@@ -58,7 +58,7 @@ export default {
     // oznaczenie celu na przedniej ścianie półki – widać je po obrocie w hali
     L.sign('WYJŚCIE', '', 3.8, 1.8, 10, 4.6, -28.45, 0);
     L.sign('WYJŚCIE', 'na półce', 6, 2.2, 7.95, 4.4, -32, -Math.PI / 2);
-    L.sign('WYJŚCIE', 'na półce', 8, 3, 10, 9, -44.95, 0);
+    L.sign('WYJŚCIE', 'na półce', 7, 2.6, 8, 9, -44.95, 0);
     L.sign('WIEŻA', '12 m', 6, 2.2, -3, 5, 8.05, 0);
     L.sign('KURTYNA', '', 8, 2.4, 0, 15.2, -18.95, 0);
     L.sign('PORTALE 0 / 2', 'zacznij od nowa', 8, 2.4, 0, 15.2, -21.05, Math.PI);

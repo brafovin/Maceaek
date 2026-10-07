@@ -8,7 +8,7 @@ import { DARK_ALL } from './util.js';
 //                   z góry), dwa kursy przez portal, obie kostki muszą stanąć na dwóch przyciskach naraz.
 //  III (z -36..-54) Zegar: slalom z czterech przegród z wąskimi oknami z kratki, przycisk czasowy 4 s; piechotą ~9 s,
 //                   portalami ~2 s (strzał przez okna). Portale trzeba ustawić, zanim ruszysz zegar.
-//  IV  (z -54..-98) Wieża i kurtyna: pasek przed wieżą jest zamknięty kratą (celuj przez nią), kostka tej próby musi
+//  IV  (z -54..-98) Wieża i kurtyna: pasek przed wieżą jest dołem za kratą (celuj przez nią; wyrzucona tam kostka spada na dno przepaści), kostka tej próby musi
 //                   zostać na przycisku na szczycie (otwiera pełną przegrodę z drzwiami D5), bo przez kurtynę nie
 //                   przejdzie, a gracz leci nad nią na pędzie z portalu i traci portale.
 // Kostki nie przechodzą przez drzwi D3 i D4 (kurtyna w świetle drzwi zwraca je na start), więc każda próba ma
@@ -19,7 +19,8 @@ import { DARK_ALL } from './util.js';
 // Przejście wymaga lotu z wysokości wieży (25 m/s) z portalu umieszczonego w górnej części białego pasa (środek >= ok. 8,5 m).
 const H = 24;
 
-// podłoga z białymi łatkami na ciemnym tle (łatki: [x0,x1,z0,z1], nie nachodzą na siebie)
+// podłoga z białymi łatkami na ciemnym tle (łatki: [x0,x1,z0,z1], nie nachodzą na siebie). Łatki są pełnej grubości
+// podłogi (a nie cienkimi płytkami), bo w portal na podłodze trzeba móc wpaść
 function floorWithPatches(L, x0, x1, z0, z1, patches) {
   const xs = [...new Set([x0, x1, ...patches.flatMap(p => [p[0], p[1]])])].sort((a, b) => a - b);
   for (let i = 0; i < xs.length - 1; i++) {
@@ -39,8 +40,8 @@ function floorWithPatches(L, x0, x1, z0, z1, patches) {
 // z niego wyjść na drugą stronę), schody wyjściowe tylko po stronie południowej (z1) – po wpadnięciu wracasz pieszo, bez kwasu
 function safePit(L, x0, x1, z0, z1, depth) {
   L.box(x0, -8, z0, x1, -depth, z1, 'dark');
-  const n = Math.round(depth / 0.5);
-  for (let k = 1; k <= n; k++) L.box(-14, -depth, z1 - 0.5 * (n + 1 - k), -10, -depth + 0.5 * k, z1, 'dark');
+  const n = Math.ceil(depth / 0.54 - 1e-9), sh = depth / n;     // stopnie nie wyższe niż 0,54 m (auto-wejście 0,55)
+  for (let k = 1; k <= n; k++) L.box(-14, -depth, z1 - 0.5 * (n + 1 - k), -10, -depth + sh * k, z1, 'dark');
 }
 
 // pełny dach nad przepaścią (używany tylko w próbie II): od dołu do sufitu, nie da się na nim stanąć ani nad nim przelecieć
@@ -48,19 +49,16 @@ function roof(L, zNear, zFar) {
   L.box(-14, 2.2, zFar, 14, H, zNear, 'dark');
 }
 
-// poręcz z kratki wzdłuż schodów (kroki co 0,5 m, głębokość stopnia d, szczyt schodów przy zTop): sekcje o długości `sec`,
-// każda sięga `gap` ponad najwyższy stopień pod nią – nie da się z niej wyskoczyć w bok ani przeskoczyć
-function stairRail(L, xa, xb, zA, zB, zTop, d, top, gap = 1.9, sec = 3.2) {
-  for (let z = zA; z < zB - 1e-6; z += sec) {
-    const z2 = Math.min(z + sec, zB);
-    const h = top - 0.5 * Math.floor((z - zTop + 1e-6) / d);
-    L.box(xa, 0, z, xb, h + gap, z2, 'grate');
-  }
+// poręcz z kratki wzdłuż schodów: jeden wysoki płot (do top + 3,2 m) na całej długości. Zbieg z góry z biegu (10 m/s)
+// to rzut ukośny – gracz leci wysoko ponad schodami, więc poręcz „stopniowo niższa” przeciekała bokiem na wysokości
+// 6–10 m. Płot sięga ponad każdy możliwy łuk (z wyskokiem z samego szczytu najwyżej ~top + 1,5 m).
+function stairRail(L, xa, xb, zA, zB, top) {
+  L.box(xa, 0, zA, xb, top + 3.2, zB, 'grate');
 }
 
-// biały pas na ciemnej podłodze oznacza krawędź (za wąski na portal)
-function edge(L, z0, z1) {
-  L.box(-14, 0, z0, 14, 0.04, z1, 'white');
+// biały pas na ciemnej podłodze oznacza krawędź przepaści (za wąski na portal)
+function edge(L, z0, z1, y = 0) {
+  L.box(-14, y, z0, 14, y + 0.04, z1, 'white');
 }
 
 // kluczowe współrzędne (używane też w solve)
@@ -70,7 +68,7 @@ const T_TB = 4;                                // czas przycisku S3
 const W3 = { z0: -36, z1: -33, doorX0: -8.7, doorX1: -7.3 };   // gruba ściana (tunel) między S2 a S3
 const S3 = { lanes: [-40.6, -43.8, -47, -50.2], plate: -53 };
 const ZW = -54;                                // północna powierzchnia ściany W4 (początek próby IV)
-const S4 = { x0: 0, x1: 8, z0: ZW - 11, z1: ZW - 7, top: 12 };
+const S4 = { x0: 0, x1: 8, z0: ZW - 11, z1: ZW - 7, top: 12, up: 4 };   // up: wysokość lądowiska i pola wyjścia
 S4.zE = S4.z0 - 3;                             // krawędź przepaści od strony wieży
 S4.zF = S4.z0 - 19;                            // druga krawędź przepaści (lądowisko)
 S4.wz = S4.zF - 6;                             // przegroda z drzwiami D5
@@ -80,7 +78,7 @@ export default {
   name: 'Rękawica',
   hint: 'Cztery próby, jedna po drugiej, każda z innej bajki. Nie wszystko da się zabrać ze sobą – a kurtyna nie wybacza.',
   spawn: { x: -6, y: 0, z: 20, yaw: 0.35 },
-  exit: { x: 6, y: 0, z: S4.wz - 4.5 },
+  exit: { x: 6, y: S4.up, z: S4.wz - 4.5 },
   build(L) {
     L.room(-14, 14, ROOM_N, S1.roomS, H, DARK_ALL);
     buildS1(L);
@@ -118,17 +116,14 @@ export default {
 
     // ===== S2: komora z przepaścią =====
     T.wait(0.5);
-    T.walkTo(-8, -10.5, 8); T.wait(0.3);             // przycisk czasowy otwiera drzwi D1
+    T.walkTo(-8, -11.6, 8); T.wait(0.3);             // przycisk czasowy otwiera drzwi D1
     T.walkTo(0, -11, 4, true); T.walkTo(0, -15.5, 4, true);
     T.assert(pl.pos.z < -14, 'drzwi D1 zamknięte');
-    // kostka C1 jako stopień do półki z kostką C2
-    T.grab(1);
-    T.walkTo(-5.4, -15.1, 8); T.face(Math.PI / 2, 0); T.wait(0.5);
-    T.drop(); T.wait(1.0);
-    T.walkTo(-6.7, -15.1, 4); T.face(Math.PI / 2, 0);
-    T.run(0.3, { KeyW: 1, Space: 1 }, null);         // wskok na kostkę
+    // wejście na półkę (stały stopień) po kostkę C2
+    T.walkTo(-3, -17.3, 6); T.walkTo(-6.4, -15.1, 8); T.wait(0.4); T.face(Math.PI / 2, 0);
+    T.run(0.3, { KeyW: 1, Space: 1 }, null);         // wskok na stopień
     T.run(1, {}, () => pl.onGround);
-    T.run(0.3, { KeyW: 1, Space: 1 }, null);         // z kostki na półkę
+    T.run(0.3, { KeyW: 1, Space: 1 }, null);         // ze stopnia na półkę
     T.run(1, {}, () => pl.onGround);
     T.assert(pl.pos.y > 1.7, 'półka');
     T.walkTo(-10.5, -14.9, 4);
@@ -175,7 +170,7 @@ export default {
     const { z0, z1, zF, wz } = S4;
     T.grab(2);                                       // kostka tej próby
     T.walkTo(-4, ZW - 2, 6); T.walkTo(-4, z0 - 1.6, 6);
-    T.shoot(1, 7, 11.4, z0 - 0.15);                  // wylot: wysoko na białym pasie ściany wieży – przez kratę z zachodu
+    T.shoot(1, 7, 11.7, z0 - 0.15);                  // wylot: na samej górze białego pasa ściany wieży (portal sam się dosunie) – przez kratę z zachodu
     T.walkTo(-4, z1 + 0.55, 6); T.walkTo(5, z1 + 0.55, 8);
     T.shoot(0, 5, 0, z1 + 2);                      // wejście: łatka na posadzce przed wieżą
     T.walkTo(7.4, z0 + 6, 5); T.walkTo(7.4, z0 + 9.9, 5); T.walkTo(11, z0 + 9.9, 5);
@@ -200,20 +195,19 @@ function buildS1(L) {
   // na północnej ścianie biały pas), schody po zachodniej stronie
   floorWithPatches(L, -14, 14, zN, roomS, [[3.75, 6.25, pz0, pz1]]);
   edge(L, zN, zN + 0.5);
-  safePit(L, -14, 14, zF, zN, 3);
+  safePit(L, -14, 14, zF, zN, 2.7);
   L.box(x0, 0, z0, x1, top, z1, 'dark');
   L.box(x0, 3.5, z0 - 0.3, x1, top - 0.2, z0, 'white');
   for (let i = 1; i <= n; i++) L.box(-2, 0, z0, x0, 0.5 * i, z0 + TREAD * (n - i + 1), 'dark');
   // balustrada z kratki: od północy i od wschodu na szczycie, a wzdłuż schodów z obu stron (od wschodu tam, gdzie
-  // schody wystają spoza wieży) – stopniowo niższa
+  // schody wystają spoza wieży) – wysoki płot na całej długości
   L.box(-2, top, z0, x1, top + 3.2, z0 + 0.3, 'grate');
   L.box(x1 - 0.3, top, z0, x1, top + 3.2, z1, 'grate');
-  stairRail(L, -2.3, -2, z0, sEnd, z0, TREAD, top);
-  stairRail(L, x0, x0 + 0.3, z1, sEnd, z0, TREAD, top);
-  L.sign('PRÓBA I', 'wyrzut', 5, 1.3, 13.95, 3.2, 12, -Math.PI / 2);
+  stairRail(L, -2.3, -2, z0, sEnd, top);
+  stairRail(L, x0, x0 + 0.3, z1, sEnd, top);
+  L.sign('PRÓBA I', 'wieża', 5, 1.3, 13.95, 3.2, 12, -Math.PI / 2);
   L.sign('CEL: ZIELONE POLE', 'na końcu czterech prób – idź na północ', 6.4, 1.3, -13.95, 4.2, 11, Math.PI / 2);
-  // lądowisko
-  L.floor(-14, 14, -13, zF, 'dark');
+  // lądowisko (podłoga: patrz S2)
   edge(L, zF - 0.5, zF);
 }
 
@@ -224,15 +218,12 @@ function buildS2(L) {
   L.box(2, 0, -14, 14, H, -13, 'dark');
   L.box(-2, 4.5, -14, 2, H, -13, 'dark');
   L.door('B0', -2, 0, -14, 2, 4.5, -13);
-  L.button('B0', -8, -10.5, { timer: 8 });
+  L.fizzler(-2, 0, -14, 2, 4.5, -13);              // kostka wyrzucona przez drzwi wraca na start (nie wpada do przepaści S1)
+  L.button('B0', -8, -11.6, { timer: 8 });
   L.sign('DRZWI', 'przycisk czasowy', 5.2, 1.2, 0, 5.6, -12.95, 0);
-  L.floor(-14, 14, -14, -13, 'dark');             // pod ścianą
   // posadzki: przedsionek, przepaść 10,5 m, strefa za nią
-  L.floor(-14, 14, -19, -14, 'dark');
+  L.floor(-14, 14, -19, -10, 'dark');              // lądowisko S1, podłoga pod ścianą W1 i przedsionek S2
   safePit(L, -14, 14, -29.5, -19, 3.5);
-  L.floor(-14, 14, -33, -29.5, 'dark');
-  edge(L, -19, -18.5);
-  edge(L, -30, -29.5);
   L.box(13.4, 0, -16.5, 14, 5, -14, 'white');    // łatka NE na wschodniej ścianie przedsionka
   roof(L, -18, -22.7);                            // dach do sufitu (niski tunel): nie wejdziesz na niego z kostek ani z półki, kostka się na nim nie zatrzyma
   // ściana W3 – gruba (3 m), z wąskim przejściem D3 (x -8,7..-7,3): przez tunel nie da się strzelić w głąb S3;
@@ -244,17 +235,20 @@ function buildS2(L) {
   L.box(-4, 0, wz1, 4, 6, wz1 + 0.3, 'white');
   L.door(['B2', 'B2b'], dx0, 0, wz1 - 0.5, dx1, 4.5, wz1);          // oba przyciski naraz (domyślnie tryb „all”)
   L.fizzler(dx0, 0, wz1 - 0.5, dx1, 4.5, wz1);                      // kostki nie przejdą (wracają na start) i nie utrzymają drzwi
-  L.floor(-14, 14, wz0, wz1, 'dark');             // pod ścianą W3 (przejście drzwiami)
+  L.floor(-14, 14, wz0, -29.5, 'dark');           // strefa za przepaścią i podłoga pod ścianą W3 (przejście drzwiami)
+  edge(L, -19, -18.5);
+  edge(L, -30, -29.5);
   L.button('B2', 7.5, -31.4, { r: 0.9 });
   L.button('B2b', 11, -31.4, { r: 0.9 });
   // półka 1,8 m z kostką: sam nie wskoczysz, a z podłogi kostki nie zdejmiesz (front osłania kratka)
   L.box(-14, 0, -16.2, -9, 1.8, -14, 'dark');
-  L.box(-14, 1.8, -16.2, -9, 7, -15.9, 'grate');
+  L.box(-14, 1.8, -16.2, -9, H, -15.9, 'grate');   // kratka do sufitu: kostka nie utknie na jej górze
+  L.box(-9, 0, -16.2, -7.9, 0.9, -14, 'white');    // stały stopień przy półce: półka jest zawsze osiągalna (kostka rzucona na półkę da się stamtąd zabrać)
   L.cube(-13.3, 1.8, -14.8);                     // C2 – na półce, w głębi (z podłogi poza zasięgiem)
   L.cube(-3, 0, -15.5);                            // C1 – na posadzce
-  L.sign('PRZYCISKI', 'oba trzymają drzwi', 6.2, 1.2, 9.25, 2.6, -32.95, 0);
-  L.sign('DRZWI', 'kostki nie przejdą', 4.2, 1.2, -8, 5.6, -32.95, 0);
-  L.sign('PRÓBA II', 'dwie kostki', 5, 1.3, -13.95, 3.4, -23, Math.PI / 2);
+  L.sign('PRZYCISKI', '1 · 2', 6.2, 1.2, 9.25, 2.6, -32.95, 0);
+  L.sign('DRZWI', '', 4.2, 1.2, -8, 5.6, -32.95, 0);
+  L.sign('PRÓBA II', 'komora', 5, 1.3, -13.95, 3.4, -26.5, Math.PI / 2);
 }
 
 // ---- S3: slalom z przegród i zegar ----
@@ -262,15 +256,13 @@ function buildS2(L) {
 // ale tylko z samej S3: okna leżą poza zasięgiem linii strzału przez tunel D3
 function partition(L, z, gap) {
   const a = z - 0.2, b = z + 0.2;
-  L.box(-5.6, 0.7, a, -3, 3.8, b, 'grate');
-  L.box(-5.6, 0, a, -3, 0.7, b, 'dark');
-  L.box(-5.6, 3.8, a, -3, 6, b, 'dark');
+  L.box(-5.6, 0, a, -3, 6, b, 'grate');
   if (gap === 'E') { L.box(-14, 0, a, -5.6, 6, b, 'dark'); L.box(-3, 0, a, 8, 6, b, 'dark'); }
   else { L.box(-8, 0, a, -5.6, 6, b, 'dark'); L.box(-3, 0, a, 14, 6, b, 'dark'); }
 }
 function buildS3(L) {
   L.floor(-14, 14, ZW, -40, 'dark');
-  floorWithPatches(L, -14, 14, -40, -36, [[0, 4, -39.5, -36.5]]);
+  floorWithPatches(L, -14, 14, -40, -36, [[0.75, 3.25, -39.25, -36.75]]);   // łatka 2,5 × 2,5 m: tylko jeden portal
   S3.lanes.forEach((z, i) => partition(L, z, i % 2 === 0 ? 'E' : 'W'));
   // ściana W4: z tej strony ciemna, łatka PC to cienka płytka z przodu; drzwi D4 (x -2..2) z kurtyną w świetle
   const zp = S3.plate;
@@ -281,8 +273,8 @@ function buildS3(L) {
   L.door(['T1', 'T2'], -2, 0, ZW, 2, 4.5, zp, { mode: 'any' });
   L.fizzler(-2, 0, ZW, 2, 4.5, zp);
   L.button('T1', -3, -38.5, { timer: T_TB });
-  L.sign('PRÓBA III', 'zegar: ' + T_TB + ' s', 5.4, 1.3, -13.95, 3.2, -38, Math.PI / 2);
-  L.sign('DRZWI', 'kostki nie przejdą', 4.6, 1.3, 1, 5.4, zp + 0.05, 0);
+  L.sign('PRÓBA III', 'czas: ' + T_TB + ' s', 5.4, 1.3, -13.95, 3.2, -38, Math.PI / 2);
+  L.sign('DRZWI', '', 4.6, 1.3, 1, 5.4, zp + 0.05, 0);
 }
 
 // ---- S4: wieża z przyciskiem, kurtyna nad przepaścią ----
@@ -295,19 +287,19 @@ function buildS4(L) {
   floorWithPatches(L, -14, 14, z0, ZW, [[3.75, 6.25, z1 + 0.75, z1 + 3.25]]);
   floorWithPatches(L, -14, -0.3, zE, z0, []);
   L.box(-0.3, -8, zE, 14, -3, z0, 'dark');
-  safePit(L, -14, 14, zF, zE, 3);
-  L.floor(-14, 14, ROOM_N, zF, 'dark');                     // lądowisko i strefa wyjścia
-  edge(L, zF - 0.5, zF);
+  safePit(L, -14, 14, zF, zE, 2.7);
+  L.box(-14, -8, ROOM_N, 14, S4.up, zF, 'dark');           // lądowisko i strefa wyjścia – 4 m wyżej niż start próby
+  edge(L, zF - 0.5, zF, S4.up);
   L.box(-14, 0, zE, -0.3, 0.04, zE + 0.5, 'white');
   // wieża: ciemna, tylko wysoko na północnej ścianie biały pas
   L.box(x0, 0, z0, x1, top, z1, 'dark');
   L.box(x0, 3.5, z0 - 0.3, x1, top - 0.2, z0, 'white');
   for (let i = 1; i <= n; i++) L.box(x1, 0, z0, 14, 0.5 * i, z0 + TREAD * (n - i + 1), 'dark');
   // poręcze: północna nad schodami i szczytem (wysoka – kostki nie da się przerzucić na zamknięty pasek),
-  // zachodnia nad szczytem, od zachodu wzdłuż odsłoniętej krawędzi schodów – stopniowo niższa
+  // zachodnia nad szczytem, od zachodu wzdłuż odsłoniętej krawędzi schodów – wysoki płot na całej długości
   L.box(x0, top, z0, 14, top + 6.5, z0 + 0.3, 'grate');
   L.box(x0, top, z0, x0 + 0.3, top + 3.2, z1, 'grate');
-  stairRail(L, x1, x1 + 0.3, z1, sEnd, z0, TREAD, top);
+  stairRail(L, x1, x1 + 0.3, z1, sEnd, top);
   // pasek przed północną ścianą jest zamknięty kratą od zachodu (od południa i wschodu zamyka go wieża ze schodami) – celuj przez nią
   L.box(x0 - 0.3, 0, zE, x0, 15, z0, 'grate');
   L.button('B4', 4, z0 + 2, { y: top });
@@ -315,11 +307,12 @@ function buildS4(L) {
   L.button('T2', -6.5, ZW - 2.5, { timer: T_TB });
   L.cube(-10, 0, ZW - 3.5);                                     // C3 – kostka tej próby (z poprzednich nie da się przejść)
   // pełna przegroda z drzwiami D5 – jedyne przejście do pola wyjścia
-  L.box(-14, 0, wz - 1, 4, H, wz, 'dark');
-  L.box(8, 0, wz - 1, 14, H, wz, 'dark');
-  L.box(4, 4, wz - 1, 8, H, wz, 'dark');
-  L.door('B4', 4, 0, wz - 1, 8, 4, wz);
-  L.sign('PRÓBA IV', 'wieża i kurtyna', 5.6, 1.3, -13.95, 3.4, ZW - 6, Math.PI / 2);
-  L.sign('DRZWI', 'przycisk na wieży', 4.6, 1.2, 6, 5.4, wz + 0.05, 0);
-  L.sign('WYJŚCIE', 'za drzwiami', 5, 1.2, 13.95, 2.6, wz - 3.5, -Math.PI / 2);
+  const up = S4.up;
+  L.box(-14, up, wz - 1, 4, H, wz, 'dark');
+  L.box(8, up, wz - 1, 14, H, wz, 'dark');
+  L.box(4, up + 4, wz - 1, 8, H, wz, 'dark');
+  L.door('B4', 4, up, wz - 1, 8, up + 4, wz);
+  L.sign('PRÓBA IV', 'ostatnia', 5.6, 1.3, -13.95, 3.4, ZW - 6, Math.PI / 2);
+  L.sign('DRZWI', '', 4.6, 1.2, 6, S4.up + 5.4, wz + 0.05, 0);
+  L.sign('WYJŚCIE', 'za drzwiami', 5, 1.2, 13.95, S4.up + 2.6, wz - 3.5, -Math.PI / 2);
 }

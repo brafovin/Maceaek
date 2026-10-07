@@ -9,9 +9,9 @@ import { createTextures } from './textures.js';
 import { LightField, packLights, bakeWorld } from './bake.js';
 
 export const QUALITY = {
-  low:    { pixelRatio: 1,    maxDepth: 1, rt0: 0.5,  rtN: 0.35, msaa: 0, aniso: 2,  bake: { base: 2, rays: 6,  shadows: false, aoDist: 5 } },
-  medium: { pixelRatio: 1.25, maxDepth: 2, rt0: 0.75, rtN: 0.5,  msaa: 2, aniso: 8,  bake: { base: 2, rays: 10, shadows: true,  aoDist: 6 } },
-  high:   { pixelRatio: 1.75, maxDepth: 2, rt0: 1.0,  rtN: 0.5,  msaa: 4, aniso: 16, bake: { base: 1, rays: 16, shadows: true,  aoDist: 7 } },
+  low:    { pixelRatio: 1,    maxDepth: 1, rt0: 0.5,  rtN: 0.35, msaa: 0, aniso: 2,  bake: { base: 2, rays: 6,  shadows: false, aoDist: 5, hint: 2.1 } },
+  medium: { pixelRatio: 1.25, maxDepth: 2, rt0: 0.75, rtN: 0.5,  msaa: 2, aniso: 8,  bake: { base: 2, rays: 10, shadows: true,  aoDist: 6, hint: 2.1 } },
+  high:   { pixelRatio: 1.75, maxDepth: 2, rt0: 1.0,  rtN: 0.5,  msaa: 4, aniso: 16, bake: { base: 1, rays: 16, shadows: true,  aoDist: 7, hint: 1.5 } },
 };
 const STORAGE_KEY = 'maceaek.quality';
 
