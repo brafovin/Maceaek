@@ -888,7 +888,7 @@ function stepCube(c, dt) {
     if (c.onGround) { const k = Math.exp(-7 * dt); c.vel.x *= k; c.vel.z *= k; if (Math.hypot(c.vel.x, c.vel.z) < 0.05) { c.vel.x = 0; c.vel.z = 0; } }
     if (!wasOn && c.onGround && vyHit > 3) gameAudio.cubeHit(c, vyHit);
     cubeTeleport(c, prev);
-    if (c.pos.y < ACID_Y - 0.6) { gameAudio.acid(c.pos.x, ACID_Y, c.pos.z, 0.35); respawnCube(c); }
+    if (c.pos.y < ACID_Y - 0.5) { gameAudio.acid(c.pos.x, ACID_Y, c.pos.z, 0.35); respawnCube(c); }
   }
   syncCubeBox(c);
 }
