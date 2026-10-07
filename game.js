@@ -1,6 +1,7 @@
 import * as THREE from './vendor/three.module.js';
 import allLevels from './levels/index.js';
 import { createGfx, readQuality, writeQuality } from './gfx.js';
+import * as fx from './fx.js';
 
 const LEVELS = [...allLevels];
 const params = new URLSearchParams(location.search);
@@ -45,6 +46,7 @@ renderer.setClearColor(0x05070a);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, 1, NEAR, 250);
 camera.rotation.order = 'YXZ';
+fx.init({ scene, camera, renderer, COLORS, PORTAL_HW, PORTAL_HH, EYE_H, ACID_Y });
 
 // oświetlenie sceny – świat ma światło wypalone w kolorach wierzchołków (gfx.js), te światła dotyczą
 // tylko materiałów Lambert (np. podstawa przycisku)
@@ -116,9 +118,6 @@ function addObject(obj) {
   return obj;
 }
 
-const acidMat = new THREE.MeshBasicMaterial({ color: 0x78e03a, transparent: true, opacity: 0.92 });
-const padMat = new THREE.MeshBasicMaterial({ color: 0x4ade80 });
-const padRingMat = new THREE.MeshBasicMaterial({ color: 0xbbf7d0 });
 const WALL_T = 2;
 
 function addSign(text, sub, w, h, x, y, z, ry = 0) {
@@ -173,10 +172,7 @@ const LevelAPI = {
   pit(x0, x1, z0, z1) {
     addBox(x0, -8, z0, x1, -6, z1, 'dark');
     gfx.addPit(x0, x1, z0, z1);
-    const acid = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), acidMat);
-    acid.rotation.x = -Math.PI / 2;
-    acid.position.set((x0 + x1) / 2, ACID_Y, (z0 + z1) / 2);
-    addObject(acid);
+    addObject(fx.makeAcid(x0, x1, z0, z1));
   },
 };
 
@@ -188,45 +184,16 @@ function clearLevel() {
   for (const o of levelObjects) { scene.remove(o); o.geometry?.dispose(); }
   levelObjects.length = 0;
   resetMechanics();
-  for (const e of effects.splice(0)) { scene.remove(e.mesh); e.mesh.geometry.dispose(); e.mesh.material.dispose(); }
+  fx.clearLevel();
 }
 
 // ---------------------------------------------------------------- portale ----
 const DUMMY_TEX = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
 DUMMY_TEX.needsUpdate = true;
 
-const portalVert = /* glsl */`
-  varying vec2 vP;
-  varying vec4 vClip;
-  void main() {
-    vP = position.xy;
-    vec4 mv = modelViewMatrix * vec4(position, 1.0);
-    vClip = projectionMatrix * mv;
-    gl_Position = vClip;
-  }
-`;
-const portalFrag = /* glsl */`
-  uniform sampler2D tMap;
-  uniform vec3 uColor;
-  uniform float uTime;
-  uniform float uUseTex;
-  varying vec2 vP;
-  varying vec4 vClip;
-  void main() {
-    float r = length(vP);
-    vec2 suv = vClip.xy / vClip.w * 0.5 + 0.5;
-    vec3 view = texture2D(tMap, suv).rgb;
-    vec3 inner = mix(uColor * 0.22, view, uUseTex);
-    float a = atan(vP.y, vP.x);
-    float wob = 0.5 + 0.5 * sin(a * 5.0 - uTime * 5.0) * sin(a * 3.0 + uTime * 3.0);
-    vec3 glow = uColor * (1.1 + 0.9 * wob) + vec3(0.12);
-    float ring = smoothstep(0.72, 0.84, r);
-    vec3 col = mix(inner, glow, ring);
-    float alpha = 1.0 - smoothstep(0.90, 1.0, r);
-    gl_FragColor = vec4(col, alpha);
-    #include <colorspace_fragment>
-  }
-`;
+// shader portalu (wir, pierścień, refrakcja, rozbłysk otwarcia) – w fx.js; tMap/uUseTex/vClip działają jak dawniej
+const portalVert = fx.portalVert;
+const portalFrag = fx.portalFrag;
 
 const ROT180Y = new THREE.Matrix4().makeRotationY(Math.PI);
 
@@ -244,12 +211,7 @@ class Portal {
     this.host = null;
     this.open = 0;
 
-    this.uniforms = {
-      tMap: { value: DUMMY_TEX },
-      uColor: { value: new THREE.Color(COLORS[index]) },
-      uTime: { value: 0 },
-      uUseTex: { value: 0 },
-    };
+    this.uniforms = fx.portalUniforms(COLORS[index], DUMMY_TEX);
     this.material = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
       vertexShader: portalVert,
@@ -264,12 +226,13 @@ class Portal {
     this.disc.frustumCulled = false;
     this.group = new THREE.Group();
     this.group.matrixAutoUpdate = false;
-    this.group.add(this.disc);
+    this.group.add(this.disc, fx.makeHalo(this));
     this.group.visible = false;
     scene.add(this.group);
   }
 
   place(pos, normal, up, host) {
+    if (this.active) fx.portalGone(this);
     this.pos.copy(pos);
     this.normal.copy(normal);
     this.up.copy(up);
@@ -291,9 +254,11 @@ class Portal {
     const s = 1 - Math.pow(1 - e, 3) * Math.cos(e * 5.5) * 0.9; // sprężysty „wskok”
     const k = Math.max(0.001, e >= 1 ? 1 : s * e);
     this.disc.scale.set(PORTAL_HW / 0.88 * k, PORTAL_HH / 0.88 * k, 1);
+    this.uniforms.uOpen.value = e;
   }
 
-  clear() {
+  clear(silent) {
+    if (this.active && !silent) fx.portalGone(this);
     this.active = false;
     this.group.visible = false;
   }
@@ -410,95 +375,13 @@ function renderView(cam, depth, target) {
 // -------------------------------------------------------------- pistolet ----
 const gunScene = new THREE.Scene();
 const gunCam = new THREE.PerspectiveCamera(55, 1, 0.01, 10);
-gunScene.add(new THREE.AmbientLight(0xffffff, 1.6));
-const gunSun = new THREE.DirectionalLight(0xffffff, 2.0);
-gunSun.position.set(0.4, 0.8, 0.6);
-gunScene.add(gunSun);
 
-const gun = new THREE.Group();
-gun.scale.setScalar(0.65);
-const gunBase = new THREE.Vector3(0.16, -0.15, -0.42);
-gunScene.add(gun);
-const gunWhite = new THREE.MeshLambertMaterial({ color: 0xe9edf1 });
-const gunGrey = new THREE.MeshLambertMaterial({ color: 0x4b525a });
-const gunGlowMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-{
-  const rear = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.058, 0.26, 24), gunWhite);
-  rear.rotation.x = Math.PI / 2;
-  rear.position.set(0, 0, 0.09);
-  gun.add(rear);
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.046, 0.3, 24), gunWhite);
-  barrel.rotation.x = Math.PI / 2;
-  barrel.position.set(0, 0, -0.19);
-  gun.add(barrel);
-  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.035, 24), gunGrey);
-  collar.rotation.x = Math.PI / 2;
-  collar.position.set(0, 0, -0.03);
-  gun.add(collar);
-  const spine = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.22), gunGrey);
-  spine.position.set(0, 0.062, 0.02);
-  gun.add(spine);
-  for (let i = 0; i < 3; i++) {
-    const a = i * (Math.PI * 2 / 3) + Math.PI / 2;
-    const prong = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.012, 0.16), gunGrey);
-    prong.position.set(Math.cos(a) * 0.05, Math.sin(a) * 0.05, -0.34);
-    prong.rotation.z = a - Math.PI / 2;
-    gun.add(prong);
-  }
-  const tip = new THREE.Mesh(new THREE.TorusGeometry(0.034, 0.007, 10, 28), gunGlowMat);
-  tip.position.set(0, 0, -0.35);
-  gun.add(tip);
-  const core = new THREE.Mesh(new THREE.SphereGeometry(0.018, 12, 10), gunGlowMat);
-  core.position.set(0, 0, -0.335);
-  gun.add(core);
-}
-let gunKick = 0;
-const gunColor = new THREE.Color(0xdfe7ee);
-const gunTarget = new THREE.Color(0xdfe7ee);
+// model, animacje i światła pistoletu – w fxmodels.js (przez fx.js)
+const gunRig = fx.createGun(gunScene);
 
 // -------------------------------------------------------------- efekty ----
-const effects = [];
-
-function spawnRing(point, normal, color) {
-  const m = new THREE.Mesh(
-    new THREE.RingGeometry(0.2, 0.28, 32),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1, side: THREE.DoubleSide, depthWrite: false })
-  );
-  m.position.copy(point).addScaledVector(normal, 0.02);
-  m.lookAt(_p.copy(point).add(normal));
-  scene.add(m);
-  effects.push({ mesh: m, t: 0, life: 0.45, kind: 'ring' });
-}
-
-const _up = new THREE.Vector3(0, 1, 0);
-function spawnBeam(from, to, color) {
-  const len = from.distanceTo(to);
-  const m = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.014, 0.014, len, 6, 1, true),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false })
-  );
-  m.position.copy(from).add(to).multiplyScalar(0.5);
-  m.quaternion.setFromUnitVectors(_up, _p.subVectors(to, from).normalize());
-  scene.add(m);
-  effects.push({ mesh: m, t: 0, life: 0.18, kind: 'beam' });
-}
-
-function updateEffects(dt) {
-  for (let i = effects.length - 1; i >= 0; i--) {
-    const e = effects[i];
-    e.t += dt;
-    const k = e.t / e.life;
-    if (k >= 1) {
-      scene.remove(e.mesh);
-      e.mesh.geometry.dispose();
-      e.mesh.material.dispose();
-      effects.splice(i, 1);
-      continue;
-    }
-    e.mesh.material.opacity = (1 - k) * (e.kind === 'beam' ? 0.9 : 1);
-    if (e.kind === 'ring') e.mesh.scale.setScalar(1 + k * 1.6);
-  }
-}
+// pociski, rozbryzgi, cząstki i efekty ekranowe – w fx.js; tu tylko wejście dla fire()
+function spawnRing(point, normal, color) { fx.impact(point, normal, color); }
 
 // ------------------------------------------------------------------ gracz ----
 const player = {
@@ -744,6 +627,7 @@ const _e = new THREE.Euler();
 function teleport(P) {
   const M = transforms[P.index];
   const O = P.other;
+  fx.teleported(P);
 
   // kamera (oczy) – ciągłość obrazu
   const eye = _eye.copy(player.pos); eye.y += EYE_H;
@@ -827,7 +711,7 @@ const cubeMat = (() => {
     for (const [x, y] of [[26, 26], [s - 26, 26], [26, s - 26], [s - 26, s - 26]]) { g.beginPath(); g.arc(x, y, 5, 0, 7); g.fill(); }
   });
   tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-  return new THREE.MeshLambertMaterial({ map: tex });
+  return fx.cubeMaterial(new THREE.MeshLambertMaterial({ map: tex }));
 })();
 
 function makeCube(x, y, z) {
@@ -847,6 +731,7 @@ function makeCube(x, y, z) {
   cubes.push(c);
   syncCubeBox(c);
   dynBoxes.push(c.dyn);
+  fx.cubeBuilt(c, cubes.length - 1);
   return c;
 }
 
@@ -995,8 +880,8 @@ function respawnCube(c) {
   fxCubeReset(c);
 }
 
-function fxCubeTeleport() {}
-function fxCubeReset() {}
+function fxCubeTeleport(c) { fx.cubeTeleport(c); }
+function fxCubeReset(c) { fx.cubeReset(c); }
 
 // podnoszenie / upuszczanie / rzut
 function pickCube() {
@@ -1067,6 +952,7 @@ function addButton(id, x, z, o = {}) {
   levelObjects.push(group);
   const b = { id, x, y, z, r, timer: o.timer || 0, plate, plateMat, pressed: false, hold: 0 };
   buttons.push(b);
+  fx.buttonBuilt(b, group);
   return b;
 }
 
@@ -1075,6 +961,7 @@ function addDoor(ids, x0, y0, z0, x1, y1, z1, o = {}) {
   const mesh = worldMeshes[worldMeshes.length - 1];
   const d = { ids: Array.isArray(ids) ? ids : [ids], mode: o.mode || 'all', box, mesh, open: 0, height: y1 - y0, invert: !!o.invert };
   doors.push(d);
+  fx.doorBuilt(d);
   return d;
 }
 
@@ -1086,21 +973,7 @@ function addFizzler(x0, y0, z0, x1, y1, z1) {
   const gz0 = thin === 'z' ? Math.min(z0, (z0 + z1) / 2 - 0.35) : z0, gz1 = thin === 'z' ? Math.max(z1, (z0 + z1) / 2 + 0.35) : z1;
   void lo; void hi;
   const w = Math.max(x1 - x0, z1 - z0), h = y1 - y0;
-  const mat = new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, side: THREE.DoubleSide,
-    uniforms: { uTime: { value: 0 }, uAspect: { value: w / h } },
-    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-    fragmentShader: `varying vec2 vUv; uniform float uTime; uniform float uAspect;
-      void main(){
-        float y = vUv.y * 10.0 - uTime * 2.0;
-        float x = vUv.x * uAspect * 6.0;
-        float a = 0.16 + 0.18 * sin(y * 3.0 + sin(x * 1.7 + uTime * 3.0) * 2.0);
-        a += 0.22 * smoothstep(0.92, 1.0, abs(vUv.x - 0.5) * 2.0 + 0.0);
-        float edge = smoothstep(0.0, 0.08, vUv.y) * smoothstep(1.0, 0.92, vUv.y);
-        gl_FragColor = vec4(0.45, 0.78, 1.0, a * edge);
-        #include <colorspace_fragment>
-      }`,
-  });
+  const mat = fx.fizzlerMaterial(w, h);
   const alongX = (x1 - x0) >= (z1 - z0);
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
   mesh.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
@@ -1109,6 +982,7 @@ function addFizzler(x0, y0, z0, x1, y1, z1) {
   levelObjects.push(mesh);
   const f = { min: new THREE.Vector3(gx0, y0, gz0), max: new THREE.Vector3(gx1, y1, gz1), mesh, mat };
   fizzlers.push(f);
+  fx.fizzlerBuilt(f, w, h, alongX);
   return f;
 }
 
@@ -1169,20 +1043,16 @@ function mechanicsStep(dt) {
   }
 }
 
-function mechEvent(type, obj) { /* haczyk dla efektów i dźwięku */ void type; void obj; }
+function mechEvent(type, obj) { fx.mechEvent(type, obj); }
 
+// przyciski, kostki, fizzlery i poświaty drzwi animuje fx.update; tu tylko przesuwanie drzwi
 function mechanicsVisuals(dt) {
-  for (const b of buttons) {
-    b.plate.position.y = b.pressed ? 0.005 : 0.035;
-    b.plateMat.color.set(b.pressed ? 0x37d67a : 0xe5484d);
-  }
   for (const d of doors) {
     const target = d.box.disabled ? 1 : 0;
     d.open += (target - d.open) * Math.min(1, dt * 8);
     d.mesh.position.y = d.open * (d.height + 0.05);
     d.mesh.visible = d.open < 0.985;
   }
-  for (const f of fizzlers) f.mat.uniforms.uTime.value = time;
 }
 
 function resetMechanics() {
@@ -1239,19 +1109,10 @@ function loadLevel(i) {
   levelIndex = ((i % LEVELS.length) + LEVELS.length) % LEVELS.length;
   levelDef = LEVELS[levelIndex];
   clearLevel();
-  portals.forEach(p => p.clear());
+  portals.forEach(p => p.clear(true));
   levelDef.build(LevelAPI);
   gfx.bake(bakeContext());
-  // pole „wyjście”
-  const ex = levelDef.exit;
-  const pad = new THREE.Mesh(new THREE.CircleGeometry(1.8, 40), padMat);
-  pad.rotation.x = -Math.PI / 2;
-  pad.position.set(ex.x, ex.y + 0.015, ex.z);
-  addObject(pad);
-  const ring = new THREE.Mesh(new THREE.RingGeometry(2.0, 2.25, 48), padRingMat);
-  ring.rotation.x = -Math.PI / 2;
-  ring.position.set(ex.x, ex.y + 0.02, ex.z);
-  addObject(ring);
+  fx.makePad(levelDef.exit);
   levelDone = false;
   levelTimer = 0;
   respawn();
@@ -1332,15 +1193,14 @@ function traceShot(origin, dir) {
 }
 
 function fire(index) {
-  gunKick = 1;
-  gunTarget.set(COLORS[index]);
+  gunRig.fire(COLORS[index]);
   updateCamera();
   const dir0 = camera.getWorldDirection(new THREE.Vector3());
   const tr = traceShot(camera.position, dir0);
 
   const muzzle = new THREE.Vector3(0.13, -0.12, -0.55).applyMatrix4(camera.matrixWorld);
   tr.segs[0][0] = muzzle;
-  for (const [a, b2] of tr.segs) spawnBeam(a, b2, COLORS[index]);
+  fx.shot(tr.segs, COLORS[index], tr.hit);
   if (!tr.hit) return false;
   const hit = tr.hit;
   const box = hit.object.userData.box;
@@ -1548,7 +1408,6 @@ function setQuality(name, save = true) {
 // ------------------------------------------------------------ pętla gry ----
 let lastT = performance.now();
 let time = 0;
-let bob = 0;
 
 function updateCamera(dt = 0) {
   player.roll *= Math.exp(-7 * dt);
@@ -1557,23 +1416,13 @@ function updateCamera(dt = 0) {
   if (player.camOffset.lengthSq() < 1e-6) player.camOffset.set(0, 0, 0);
   camera.position.set(player.pos.x, player.pos.y + EYE_H, player.pos.z).add(player.camOffset);
   camera.rotation.set(player.pitch, player.yaw, player.roll, 'YXZ');
+  fx.cameraFx(camera, dt);
   camera.updateMatrixWorld(true);
   camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
 }
 
 function updateGun(dt) {
-  gunKick = Math.max(0, gunKick - dt * 6);
-  const sp = Math.hypot(player.vel.x, player.vel.z);
-  bob += dt * (3 + sp * 1.3) * (player.onGround ? 1 : 0.2);
-  const amp = player.onGround ? Math.min(sp / WALK, 1.6) : 0.2;
-  gun.position.set(
-    gunBase.x + Math.sin(bob) * 0.006 * amp,
-    gunBase.y + Math.abs(Math.cos(bob)) * 0.008 * amp - Math.min(Math.max(player.vel.y, -8), 8) * 0.0012,
-    gunBase.z + gunKick * 0.07
-  );
-  gun.rotation.set(gunKick * 0.12, 0, 0);
-  gunColor.lerp(gunTarget, Math.min(1, dt * 10));
-  gunGlowMat.color.copy(gunColor).multiplyScalar(1.0);
+  gunRig.update(dt);
 }
 
 function frame() {
@@ -1596,22 +1445,21 @@ function frame() {
     if (exitReached()) {
       levelDone = true;
       levelTimer = 0;
+      fx.levelComplete(levelDef.exit);
       doneSet.add(levelIndex);
       saveDone();
       toast(levelIndex === LEVELS.length - 1 ? 'Gratulacje – ukończyłeś wszystkie poziomy! 🎉' : 'Poziom ukończony!', 2600);
     }
   }
-  padMat.color.setHSL(0.38, 0.7, 0.5 + 0.1 * Math.sin(time * 3));
-  acidMat.color.setHSL(0.25 + 0.02 * Math.sin(time * 2), 0.75, 0.5 + 0.05 * Math.sin(time * 3.3));
 
   for (const P of portals) {
     P.uniforms.uTime.value = time;
     if (P.active && P.open < 1) {
-      P.open = Math.min(1, P.open + dt * 4.5);
+      P.open = Math.min(1, P.open + dt * 3.2);
       P.updateScale();
     }
   }
-  updateEffects(dt);
+  fx.update(dt);
   mechanicsVisuals(dt);
   gfx.updateDynamics(cubes, dt);
   updateCamera(dt);
@@ -1647,6 +1495,7 @@ const game = {
   getQuality: () => qualityName,
 };
 window.game = game;
+fx.bind({ player, portals, mech, cubes, buttons, doors, fizzlers, game });
 
 async function boot() {
   // ?lvmod=/levels/lv11.js – wczytaj tylko jeden poziom z podanego modułu (do testów)
