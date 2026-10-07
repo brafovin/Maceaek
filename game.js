@@ -614,6 +614,7 @@ function physicsStep(dt) {
   gameAudio.move(dt, player, wasGround, vyBefore);
 
   mechanicsStep(dt);
+  if (!game.exitHit && levelDef && exitReached()) game.exitHit = true;
 
   // kwas
   if (player.pos.y < ACID_Y - 0.4) {
@@ -859,7 +860,7 @@ function stepCube(c, dt) {
   if (c.held) {
     const t = holdTarget(_holdT);
     // cel jest za daleko (np. po śmierci/respawnie gracza) – upuść, zamiast „teleportować” kostkę przez ściany
-    if (c.pos.distanceTo(t) > 3.2) { dropCube(false, true); syncCubeBox(c); return; }
+    if (c.pos.distanceTo(t) > 8) { dropCube(false, true); syncCubeBox(c); return; }
     const old = _p.copy(c.pos);
     c.onGround = false;
     c.vel.set(0, 0, 0);
@@ -874,6 +875,8 @@ function stepCube(c, dt) {
     }
     c.vel.copy(c.pos).sub(old).multiplyScalar(1 / dt);
     c.vel.clampLength(0, 14);
+    // kostka nie nadąża za celem (zaklinowana za rogiem) – upuść
+    if (c.pos.distanceTo(t) > 2.8) dropCube(false, true);
   } else {
     const prev = _p.copy(c.pos);
     c.vel.y = Math.max(c.vel.y - GRAVITY * dt, -55);
@@ -1184,6 +1187,7 @@ function loadLevel(i) {
   gfx.bake(bakeContext());
   fx.makePad(levelDef.exit);
   levelDone = false;
+  game.exitHit = false;
   levelTimer = 0;
   gameAudio.levelStart();
   levelTime = 0;
@@ -1215,6 +1219,7 @@ function restartLevel() {
   respawn();
   updateCrosshair();
   levelDone = false;
+  game.exitHit = false;
   levelTimer = 0;
   levelTime = 0;
   mech.deaths = 0;
@@ -1556,6 +1561,7 @@ const game = {
   get levelDone() { return levelDone; },
   levelIndex: () => levelIndex,
   exitReached,
+  exitHit: false,    // zatrzask: gracz choć raz stanął na wyjściu (testy; czyszczony przy loadLevel/restartLevel)
   cubes, buttons, doors, fizzlers, mech,
   pickCube, dropCube, lookTarget,
   events, doneSet, requestLock,

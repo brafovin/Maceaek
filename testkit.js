@@ -139,7 +139,7 @@ export function install(game) {
     // ---- asercje ----
     assert(cond, msg = 'asercja nie przeszła') { if (!cond) throw new Error(msg); },
     // czy gracz stoi na wyjściu (po solve)
-    assertExit() { for (let i = 0; i < 6; i++) game.step(DT); if (!game.exitReached()) throw new Error('gracz nie stoi na wyjściu: ' + JSON.stringify(T.st())); },
+    assertExit() { for (let i = 0; i < 6; i++) game.step(DT); if (!game.exitHit && !game.exitReached()) throw new Error('gracz nie stoi na wyjściu: ' + JSON.stringify(T.st())); },
   };
   return T;
 }

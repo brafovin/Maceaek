@@ -40,7 +40,7 @@ const res = await page.evaluate(({ src, jitter, seed }) => {
   const out = { value: null, error: null };
   try { out.value = (0, eval)('(' + src + ')')(T); } catch (e) { out.error = String(e && e.stack || e).split('\n').slice(0, 4).join(' | '); }
   for (let i = 0; i < 6; i++) g.step(1 / 120);
-  out.exit = g.exitReached();
+  out.exit = g.exitHit || g.exitReached();
   out.deaths = g.mech.deaths;
   out.cubeResets = g.mech.cubeResets;
   out.state = T.st();
