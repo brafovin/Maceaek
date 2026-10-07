@@ -10,9 +10,11 @@ export default {
     L.floor(-9, 9, -22, -14);
   },
   solve(T) {
-    T.shoot(1, 0, 0, -18);
-    T.shoot(0, 0, 0, 6);
-    T.walkTo(0, 5); T.run(1, { KeyW: 1 }); T.land();
+    T.shoot(1, 4, 0, -18);                         // drugi brzeg, obok pola wyjścia
+    T.shoot(0, 0, 0, 6);                           // tuż przed kwasem
+    T.assert(T.walkThrough(0), 'nie wszedłeś w portal');
+    T.run(0.8, { KeyW: 1 }, null);                 // po wyjściu – dalej od portalu, żeby nie wpaść z powrotem
+    T.land();
     T.walkTo(0, -18);
   },
 };
