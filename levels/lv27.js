@@ -170,6 +170,7 @@ export default {
     T.walkTo(-7, -9, 20);
     T.shoot(0, -7, 0, -2);                                       // biała łatka podłogi
     T.assert(T.walkThrough(0), 'nie wszedłem w niebieski portal');
+    T.run(0.8, { KeyW: 1 }, null);                               // zejście z otworu portalu w podłodze (inaczej gracz wpada z powrotem)
     T.land(6);
     T.walkTo(3, 21, 10);                                         // przez kurtynę (portale znikają)
     T.walkTo(1.0, 24.0, 10); T.wait(0.5);                        // Q2 otwiera wyjście
