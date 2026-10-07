@@ -2,33 +2,36 @@ import { DARK_ALL } from './util.js';
 
 // Poziom 28 – „Odbicie”.
 //
-// Hala luster: ciemna hala z trzema poprzecznymi murami (B1, B2, B3) i kwasem na całej długości.
-// Portalowalne są tylko małe, oprawione w pomarańczowe ramki łatki (1,5 × 2,5 m) i jedna wielka, kusząca tafla „f”.
+// Hala luster: ciemna hala (36 × 76 m) z trzema poprzecznymi murami B1, B2, B3 i kwasem na całej długości.
+// Portalowalne są wyłącznie małe łatki 1,5 × 2,5 m w pomarańczowych ramkach i jedna wielka, kusząca tafla „f”.
 // Start: wnęka S na południu. Wyjście: platforma EP na północnym końcu hali, za trzema murami.
 //
-//   z = +14 ┌───────── S (start, przycisk A, kostka, łatki aW/aE/aS) ─────────┐
-//   z =   0 │ kwas ................ C1 (tafla f na południowej ścianie B1)    │
-//   z = -12 │ ██████████████ B1 ████████ (przerwa na wschodzie) ..............│
-//   z = -14 │ N (wyspa: przycisk B, łatka m0)      C2 (łatki q, q2 na B2)     │
-//   z = -32 │ ██ B2 ██ [drzwi D1 – przycisk A] ██████████████████████████████│
-//   z = -34 │ C3 (łatki r1 na B3, r2/r2b na B2 od północy)                    │
-//   z = -48 │ ███████████████████ B3 ██ [drzwi D2 – przycisk B] ██████████████│
-//   z = -50 │ EP (platforma wyjścia, łatka T na północnej ścianie)            │
-//   z = -62 └─────────────────────────────────────────────────────────────────┘
+//   z = +14  ┌──────────── S: start, kostka, przyciski A i C, łatki aE / aW / aS ────────────┐
+//   z =   0  │ kwas ......... C1: tafla-pułapka f na południowej ścianie B1 .................│
+//   z = -12  │ ███████████████ B1 ███ (przerwa na wschodzie, x 4..18) ........................│
+//   z = -14  │ N: wyspa z przyciskiem B i łatką m0      C2: łatki q, q2 na południowej B2     │
+//   z = -32  │ ███ B2 ███ [drzwi D1: przycisk A] ███████████████████████████████████████████│
+//   z = -34  │ C3: łatka r1 (południowa ściana B3), r2 / r2b (północna ściana B2)            │
+//   z = -48  │ ██████████████████ B3 ███ [drzwi D2: przyciski B + C] █████████████████████│
+//   z = -50  │ EP: platforma wyjścia, łatka T w północnej ścianie hali                        │
+//   z = -62  └────────────────────────────────────────────────────────────────────────────────┘
 //
-// Dwa portale to za mało, żeby sięgnąć dalej – więc jeden z nich (pomarańczowy) „wędruje”: za każdym razem widzi
-// następną łatkę oczami swojego poprzednika, a niebieski zostaje przy graczu (łatka aE w ścianie wnęki).
+// Portale są tylko dwa, więc „łańcuch peryskopów” powstaje przez wędrówkę jednego z nich: niebieski zostaje przy graczu
+// (na ścianie wnęki), a pomarańczowy po kolei trafia na łatkę widzianą OCZAMI poprzedniej łatki:  q → m0 → r1 → r2 → T.
+// Łatka jest widoczna przez niebieski tylko z pasa o szerokości ok. 1,5 m (rzut od łatki wylotowej przez owal wejścia),
+// a kierunek pasa zależy od tego, na której ścianie wnęki stoi niebieski. Do tego dochodzą dwoje drzwi na linii strzału:
+//   D1 (przycisk A) – otwarte tylko, gdy ktoś stoi na A (a wtedy trzeba patrzeć na wprost przez portal: niebieski na aS),
+//   D2 (przyciski B + C) – B leży na wyspie N (tylko kostka), C w S (tylko gracz; stąd kąt: niebieski na aE).
+//
 // Zamierzone rozwiązanie:
-//  1. Podnieść kostkę. Niebieski na aE (wschodnia ściana wnęki).
-//  2. Pomarańczowy bezpośrednio na łatkę q (południowa ściana B2, widoczna przez przerwę w B1).
-//  3. Przez niebieski „oczami” q widać łatkę m0 po północnej stronie B1 (niewidoczną ze startu): pomarańczowy na m0.
-//  4. Wejść w niebieski z kostką – lądujemy na wyspie N. Kostkę na przycisk B (otwiera drzwi D2 w B3). Wrócić przez m0.
-//  5. Stanąć na przycisku A (otwiera D1 w B2). Z tego miejsca niebieski „patrzy” z m0 prosto na północ przez D1:
-//     strzelić pomarańczowym w łatkę r1 (południowa ściana B3). Kostka na B trzyma D2 otwarte, ale to jeszcze nie to.
-//  6. Zejść z przycisku (D1 zamyka się – już niepotrzebne). Z r1 widać r2 (północna strona B2): pomarańczowy na r2.
-//  7. Z r2 przez otwarte D2 widać łatkę T w północnej ścianie hali: pomarańczowy na T.
-//  8. Wejść w niebieski – wychodzimy z T na platformie EP. Dojść do zielonego pola.
-// Pułapki: tafla f (każdy portal tam prowadzi wprost w kwas), łatki q2 i r2b (ślepe uliczki).
+//  1. Podnieść kostkę. Niebieski na aS, pomarańczowy bezpośrednio na łatkę q (przez przerwę w B1).
+//  2. Przez niebieski widać (oczami q) łatkę m0 na północnej stronie B1 – pomarańczowy na m0.
+//  3. Wejść w niebieski z kostką: wyspa N. Kostkę na przycisk B. Wrócić przez pomarańczowy (m0).
+//  4. Stanąć na A i patrzeć prosto w niebieski: z m0 przez otwarte D1 widać r1 – pomarańczowy na r1.
+//  5. Niebieski na aE. Z r1 widać r2 – pomarańczowy na r2.
+//  6. Stanąć na C (D2 ma B + C): z r2 przez D2 widać T – pomarańczowy na T.
+//  7. Wejść w niebieski (aE) – wychodzimy z T na EP; dojść do zielonego pola.
+// Pułapki: tafla f (portal tam wyrzuca w kwas), łatki q2 i r2b (ślepe uliczki), łatka aW (żaden pas nie trafia w przyciski).
 export const design = { X0: -18, X1: 18, Z0: -62, Z1: 14, H: 14 };
 
 const X0 = -18, X1 = 18, Z0 = -62, Z1 = 14, H = 14;
@@ -36,8 +39,8 @@ const SL = 0.6;            // grubość łatki (wystaje ze ściany)
 
 export default {
   name: 'Odbicie',
-  hint: 'Nie widać ich ze startu – ale każda łatka widzi jakąś następną. Drzwi na drodze strzału otwiera ten, kto stoi na przycisku, albo ten, kto zostawił na nim ciężar.',
-  spawn: { x: 0, y: 0, z: 10, yaw: 0 },
+  hint: 'Tego, czego nie widać stąd, może dosięgnąć cudze oko. Zanim strzelisz, zadbaj o to, by nic nie stało na drodze strzału.',
+  spawn: { x: -4, y: 0, z: 11, yaw: 0 },
   exit: { x: 15, y: 0, z: -55.5 },
   build(L) {
     L.room(X0, X1, Z0, Z1, H, DARK_ALL);
@@ -57,21 +60,19 @@ export default {
     L.box(X0, -8, -34, -14, H, -32, 'dark');
     L.box(-10, -8, -34, X1, H, -32, 'dark');
     L.box(-14, 4.5, -34, -10, H, -32, 'dark');
-    L.box(-14, -8, -34, -10, 0, -32, 'dark');
-    L.door('A', -14, 0, -34, -10, 4.5, -32);
+    L.door('A', -14, -8, -34, -10, 4.5, -32);      // drzwi sięgają dna: brak progu, na którym mogłaby utknąć kostka
     // ---- mur B3 z drzwiami D2 (x od 8 do 12) ----
     L.box(X0, -8, -50, 8, H, -48, 'dark');
     L.box(12, -8, -50, X1, H, -48, 'dark');
     L.box(8, 4.5, -50, 12, H, -48, 'dark');
-    L.box(8, -8, -50, 12, 0, -48, 'dark');
-    L.door(['B', 'C'], 8, 0, -50, 12, 4.5, -48);
+    L.door(['B', 'C'], 8, -8, -50, 12, 4.5, -48);
 
     // ---- łatki: biała płyta wystająca ze ściany + pomarańczowa ramka ----
     // dir: normalna płyty; wall: współrzędna ściany-gospodarza; c: środek wzdłuż ściany; [y0,y1]; w: szerokość
     const patch = (dir, wall, c, y0, y1, w = 1.5, frame = true) => {
       const ax = dir[1], s = dir[0] === '+' ? 1 : -1;
       const a0 = s > 0 ? wall : wall - SL, a1 = s > 0 ? wall + SL : wall;
-      const f0 = s > 0 ? wall : wall - 0.3, f1 = s > 0 ? wall + 0.3 : wall;
+      const f0 = s > 0 ? wall : wall - 0.1, f1 = s > 0 ? wall + 0.1 : wall;   // ramka płytka: nie blokuje wejścia w portal
       const m = 0.28;
       if (ax === 'x') {
         if (frame) L.box(f0, Math.max(0, y0 - m), c - w / 2 - m, f1, y1 + m, c + w / 2 + m, 'door');
@@ -94,10 +95,30 @@ export default {
     patch('-z', -14, -12, 0, 2.6);            // m0
     // C3: r1 na B3 (od południa), r2 i r2b na B2 (od północy)
     patch('+z', -48, -12, 1.5, 4.1);          // r1
-    patch('-z', -34, 4, 0.5, 3.1);            // r2
-    patch('-z', -34, -2, 0.5, 3.1);           // r2b (ślepa uliczka)
+    patch('-z', -34, 4, 3.2, 5.8);           // r2 (wyżej)
+    patch('-z', -34, -2, 3.2, 5.8);          // r2b (wyżej, ślepa uliczka)
     // północna ściana hali nad EP: łatka wyjściowa T
     patch('+z', Z0, 15, 0, 2.6);              // T
+
+    // ---- dekoracja hali: pilastry przy bocznych ścianach i belki pod sufitem (nie dotykają żadnej łatki ani linii strzału) ----
+    for (const z of [-3, -9, -20, -26, -38, -44]) L.box(X1 - 1, -8, z - 0.6, X1, H, z + 0.6, 'dark');
+    for (const z of [-3, -9, -38, -44]) L.box(X0, -8, z - 0.6, X0 + 1, H, z + 0.6, 'dark');
+    for (const z of [-6, -24, -40, -56]) L.box(X0, H - 1.6, z - 0.5, X1, H, z + 0.5, 'dark');
+    L.box(-8, H - 1.6, 6.5, 8, H, 7.5, 'dark');
+
+    // ---- pasy ostrzegawcze przy krawędziach kwasu (dekoracja, daleko od łatek) ----
+    L.box(-8, 0, 0, 8, 0.04, 0.35, 'door');                       // S: północna krawędź
+    L.box(X0, 0, -21, -5, 0.04, -20.65, 'door');                  // N: północna krawędź
+    L.box(-5.35, 0, -21, -5, 0.04, -14.6, 'door');                // N: wschodnia krawędź
+    L.box(X0, 0, -50.35, 8, 0.04, -50, 'door');                   // EP: południowa krawędź (zachód)
+    L.box(12, 0, -50.35, X1, 0.04, -50, 'door');                  // EP: południowa krawędź (wschód)
+
+    // ---- siatka bezpieczeństwa na dnie kwasu ----
+    // Kostka (0,8 m) leży na dnie ze środkiem na y = -5,6 i silnik nie uznaje jej wtedy za „wpadniętą w kwas” (próg < -5,6),
+    // więc bez tej kurtyny zginęłaby bezpowrotnie. Kurtyna leży tuż nad dnem (-5,98..-5,86): dotyka jej kostka, ale gracz,
+    // który ginie w kwasie już przy stopach poniżej -5,4, nie traci przez nią portali (jej wolumen jest niewidoczny).
+    const net = L.fizzler(X0, -5.98, Z0, X1, -5.86, 0);
+    if (net && net.mesh) net.mesh.visible = false;
 
     // ---- kostka i przyciski ----
     L.cube(4.5, 0, 9);
@@ -107,11 +128,16 @@ export default {
 
     // ---- tablice ----
     L.sign('ODBICIE', 'hala luster', 7, 2, 0, 6.5, Z1 - 0.05, Math.PI);
-    L.sign('A', 'przycisk', 2.4, 1.3, -7.95, 3.4, 10, -Math.PI / 2);
+    L.sign('I', 'start', 2.2, 1.3, 5.6, 6.5, Z1 - 0.05, Math.PI);
+    L.sign('II', 'za murem', 2.6, 1.3, -9, 8.5, -11.95, 0);
+    L.sign('III', 'za drzwiami', 3.2, 1.3, 14, 8.5, -47.95, 0);
+    L.sign('A', 'przycisk', 2.4, 1.3, -4.5, 3.4, Z1 - 0.05, Math.PI);
+    L.sign('C', 'przycisk', 2.4, 1.3, -7.95, 3.4, 3, -Math.PI / 2);
     L.sign('A', 'drzwi', 2.4, 1.3, -12, 6.3, -31.95, 0);
     L.sign('B', 'przycisk', 2.4, 1.3, X0 + 0.05, 3.4, -18, -Math.PI / 2);
-    L.sign('B', 'drzwi', 2.4, 1.3, 10, 6.3, -47.95, 0);
-    L.sign('WYJŚCIE', 'platforma EP', 5, 1.4, 6, 5.5, Z0 + 0.05, 0);
+    L.sign('B + C', 'drzwi', 3.2, 1.3, 10, 6.3, -47.95, 0);
+    L.sign('WYJŚCIE', 'platforma wyjścia', 5, 1.4, 6, 5.5, Z0 + 0.05, 0);
+    L.sign('WYJŚCIE ↑', 'daleko na północy, za trzema murami', 9, 2.2, 13.2, 8.5, -31.95, 0);   // cel widoczny ze startu przez przerwę w B1
   },
 
   solve(T, upTo) {
@@ -183,10 +209,10 @@ export default {
     };
     const PT = {
       q: [10, 2.3, -31.45], m0: [-12, 1.3, -14.55], r1: [-12, 2.8, -47.45],
-      r2: [4, 1.8, -34.55], T: [15, 1.3, -61.45],
+      r2: [4, 4.5, -34.55], T: [15, 1.3, -61.45],
     };
 
-    // ---- 1. kostka, niebieski na aE, pomarańczowy bezpośrednio na q ----
+    // ---- 1. kostka, niebieski na aS, pomarańczowy bezpośrednio na q ----
     T.walkTo(4.5, 5.5);
     T.grab(0);
     T.walkTo(0, 6);
@@ -212,7 +238,7 @@ export default {
     T.assert(T.walkThrough(1), 'nie wróciłem przez m0');
     T.land(5);
     if (stop('back')) return;
-    // ---- 4. przycisk A: z m0 przez D1 na r1 ----
+    // ---- 4. przycisk A (patrzymy prosto w niebieski na aS): z m0 przez D1 na r1 ----
     T.creep(0, 9);
     T.wait(0.3);
     T.assert(T.buttonPressed('A'), 'przycisk A niewciśnięty');

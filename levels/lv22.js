@@ -68,7 +68,7 @@ export default {
     L.box(2.5, 5, -8, 13, H, -6, 'dark');
     L.box(13, 0, -8, 14, H, -6, 'dark');
     L.door('X', O1.x0, 0, -7, O1.x1, LINT, -6);
-    L.fizzler(O1.x0, 0, -7.55, O1.x1, LINT, -7.45);
+    L.fizzler(O1.x0, 0, -7.7, O1.x1, LINT, -6.2);
 
     // ---- W2: otwór O2 z kurtyną F2; wysoka łatka H na północnej ścianie ----
     L.box(-14, 0, -21, O2.x0, H, -20, 'dark');
@@ -78,7 +78,7 @@ export default {
     L.box(-14, LINT, -22, -12, H, -21, 'dark');
     L.box(-12, LINT, -22, -2, H, -21, 'white');                 // H
     L.box(-2, LINT, -22, O2.x0, H, -21, 'dark');
-    L.fizzler(O2.x0, 0, -21.05, O2.x1, LINT, -20.95);
+    L.fizzler(O2.x0, 0, -21.85, O2.x1, LINT, -20.15);
 
     // ---- W3: drzwi D2 do wyjścia, szyba (widok na wyjście) ----
     L.box(-14, 0, -36, D2.x0, H, -34, 'dark');
@@ -93,41 +93,37 @@ export default {
     L.box(CE.x0, H - 0.5, CE.z0, CE.x1, H, CE.z1, 'white');
 
     // ---- przyciski i kostka ----
-    L.button('X', X1.x, X1.z, { r: 0.9 });
+    L.button('X', X1.x, X1.z, { r: 0.9, timer: 3 });
     L.button('Y', Y.x, Y.z, { r: 1.2 });
     L.cube(X1.x, 0, X1.z);
 
     // ---- dekoracje: ramki otworów, pasy ostrzegawcze przed kurtynami, filary ----
     const fr = 0.12;
     // otwór D1/F1 od strony E (ściana północna – ciemna)
-    L.box(O1.x0 - 0.4, 0, -8 - fr, O1.x0, LINT + 0.5, -8, 'door');
-    L.box(O1.x1, 0, -8 - fr, O1.x1 + 0.4, LINT + 0.5, -8, 'door');
-    L.box(O1.x0, LINT, -8 - fr, O1.x1, LINT + 0.5, -8, 'door');
+    L.box(O1.x0 - 0.4, 0, -8 - fr, O1.x0, H, -8, 'door');
+    L.box(O1.x1, 0, -8 - fr, O1.x1 + 0.4, H, -8, 'door');
+    L.box(O1.x0, LINT, -8 - fr, O1.x1, H, -8, 'door');
     // otwór D1 od strony A – tylko zachodnia strona i nadproże (wschodnia to portalowalna biała ściana)
-    L.box(O1.x0 - 0.4, 0, -6, O1.x0, LINT + 0.5, -6 + fr, 'door');
-    L.box(O1.x0, LINT, -6, O1.x1, LINT + 0.5, -6 + fr, 'door');
+    L.box(O1.x0 - 0.4, 0, -6, O1.x0, H, -6 + fr, 'door');
+    L.box(O1.x0, LINT, -6, O1.x1, H, -6 + fr, 'door');
     // O2 od strony E (ściana południowa W2 – ciemna) i od strony C (północna – przy otworze ciemna)
-    L.box(O2.x0 - 0.4, 0, -20, O2.x0, LINT + 0.5, -20 + fr, 'door');
-    L.box(O2.x1, 0, -20, O2.x1 + 0.4, LINT + 0.5, -20 + fr, 'door');
-    L.box(O2.x0, LINT, -20, O2.x1, LINT + 0.5, -20 + fr, 'door');
-    L.box(O2.x0 - 0.4, 0, -22 - fr, O2.x0, LINT + 0.5, -22, 'door');
-    L.box(O2.x1, 0, -22 - fr, O2.x1 + 0.4, LINT + 0.5, -22, 'door');
-    L.box(O2.x0, LINT, -22 - fr, O2.x1, LINT + 0.5, -22, 'door');
+    L.box(O2.x0 - 0.4, 0, -20, O2.x0, H, -20 + fr, 'door');
+    L.box(O2.x1, 0, -20, O2.x1 + 0.4, H, -20 + fr, 'door');
+    L.box(O2.x0, LINT, -20, O2.x1, H, -20 + fr, 'door');
+    L.box(O2.x0 - 0.4, 0, -22 - fr, O2.x0, H, -22, 'door');
+    L.box(O2.x1, 0, -22 - fr, O2.x1 + 0.4, H, -22, 'door');
+    L.box(O2.x0, LINT, -22 - fr, O2.x1, H, -22, 'door');
     // drzwi wyjścia od strony C
-    L.box(D2.x0 - 0.4, 0, -34, D2.x0, LINT + 0.5, -34 + fr, 'door');
-    L.box(D2.x1, 0, -34, D2.x1 + 0.4, LINT + 0.5, -34 + fr, 'door');
-    L.box(D2.x0, LINT, -34, D2.x1, LINT + 0.5, -34 + fr, 'door');
-    // pasy ostrzegawcze na podłodze przed kurtynami (ciemna podłoga, niski stopień)
-    L.box(O1.x0, 0, -9.2, O1.x1, 0.03, -8.6, 'door');
-    L.box(O2.x0, 0, -19.9, O2.x1, 0.03, -19.3, 'door');
-    L.box(O2.x0, 0, -22.7, O2.x1, 0.03, -22.1, 'door');
+    L.box(D2.x0 - 0.4, 0, -34, D2.x0, H, -34 + fr, 'door');
+    L.box(D2.x1, 0, -34, D2.x1 + 0.4, H, -34 + fr, 'door');
+    L.box(D2.x0, LINT, -34, D2.x1, H, -34 + fr, 'door');
     // filary
     for (const [x, z] of [[-11, 17], [11, 17], [-12.2, -17], [12.4, -9.5], [-12.2, -27], [12.4, -32.5], [-12, -40], [-12, -46], [12, -46]]) {
       L.box(x - 0.7, 0, z - 0.7, x + 0.7, H, z + 0.7, 'dark');
     }
 
     // ---- tablice ----
-    L.sign('DRZWI TRZYMA PRZYCISK', 'zdejmij kostkę – zamkną się', 5, 1.2, (O1.x0 + O1.x1) / 2, 6.6, -5.85, 0);
+    L.sign('DRZWI TRZYMA PRZYCISK', 'zdejmij kostkę – po chwili zamkną się', 5, 1.2, (O1.x0 + O1.x1) / 2, 6.6, -5.85, 0);
     L.sign('CEL: KOSTKA NA PRZYCISKU', 'czerwony przycisk leży za dwiema kurtynami', 7, 1.4, 7.7, 7.6, -5.85, 0);
     L.sign('KURTYNA', 'zabiera portale i kostki', 4, 1, (O2.x0 + O2.x1) / 2, 6.6, -19.85, 0);
     L.sign('WYJŚCIE', 'kostka na przycisku otwiera drzwi', 5, 1.1, 0, 6.6, -33.85, 0);
