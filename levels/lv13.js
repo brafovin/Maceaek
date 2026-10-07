@@ -48,10 +48,12 @@ export default {
     L.box(N_X0 - 1, 0, N_Z0 - 1, N_X0, 14, N_Z1 + 1, 'dark');
     L.box(N_X0, 0, N_Z0 - 0.4, N_X1, 10, N_Z0, 'glass');
     L.box(N_X0, 0, N_Z1, N_X1, 10, N_Z1 + 0.4, 'glass');
-    L.sign('N', 'tu leży kostka', 4, 1.6, N_X0 + 0.02, 2.4, nz, -Math.PI / 2);
-    L.sign('A', 'przycisk wyspy', 6, 2.4, ISL_X0 + 0.02, 5, zc, -Math.PI / 2);
-    L.sign('KOSTKA', 'zapadnia 30 m nad podłogą', 7, 1.8, X1 - 0.02, 21, CELL_Z, Math.PI / 2);
-    L.sign('B', 'zapadnia: N + B', 5, 1.8, X1 - 0.02, 3.5, 38, Math.PI / 2);
+    // osłona kosza: zamyka się, gdy N jest wciśnięty (druga kostka nie wpadnie do kosza i nie zablokuje poziomu)
+    L.door('N', N_X1 + 0.1, 0, N_Z0 - 0.4, N_X1 + 0.6, 14, N_Z1 + 0.4, { invert: true });
+    L.sign('N', 'tu leży kostka', 4, 1.6, N_X0 + 0.02, 2.4, nz, Math.PI / 2);
+    L.sign('A', 'przycisk wyspy', 6, 2.4, ISL_X0 + 0.02, 5, zc, Math.PI / 2);
+    L.sign('KOSTKA', 'zapadnia 30 m nad podłogą', 7, 1.8, X1 - 0.02, 21, CELL_Z, -Math.PI / 2);
+    L.sign('B', 'zapadnia: N + B', 5, 1.8, X1 - 0.02, 3.5, 38, -Math.PI / 2);
     L.sign('WYJŚCIE', 'otwiera je A', 6, 1.8, 16, 3.2, 3.02, 0);
 
     // --- wysoka łata na wschodniej ścianie (wylot portalu) ---
@@ -59,8 +61,8 @@ export default {
 
     // --- klatka z zapadnią ---
     L.door(['B', 'N'], CELL_X, CELL_Y - 0.3, CELL_Z - 0.6, X1, CELL_Y, CELL_Z + 0.6);
-    L.box(CELL_X - 0.4, CELL_Y - 0.3, CELL_Z - 1.4, X1, CELL_Y + 1.6, CELL_Z - 0.6, 'dark');
-    L.box(CELL_X - 0.4, CELL_Y - 0.3, CELL_Z + 0.6, X1, CELL_Y + 1.6, CELL_Z + 1.4, 'dark');
+    L.box(CELL_X - 0.4, CELL_Y - 0.3, CELL_Z - 1.4, X1, CELL_Y + 1.6, CELL_Z - 0.6, 'glass');
+    L.box(CELL_X - 0.4, CELL_Y - 0.3, CELL_Z + 0.6, X1, CELL_Y + 1.6, CELL_Z + 1.4, 'glass');
     L.cube(CELL_X, CELL_Y, CELL_Z);
 
     // --- przycisk zapadni i kostka do rzutu ---

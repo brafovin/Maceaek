@@ -122,6 +122,10 @@ export default {
       if (k === 'F') L.floor(x0, x1, z0, z1, 'dark'); else L.pit(x0, x1, z0, z1);
     }
 
+    // „śluza” przy starcie: każda droga ze spawnu na balkon przechodzi przez fizzler, więc powrót po śmierci czyści portale
+    L.fizzler(2, 0, 10, 2.1, 4, 13);     // zachód: korytarz południowy
+    L.fizzler(3, 0, 9.6, 6, 4, 9.7);     // północ: kolumna wschodnia
+
     for (const [x0, x1, z0, z1] of FENCES) L.box(x0, 0, z0, x1, FENCE_H, z1, 'grate');
 
     // łatki: biała płyta 0..2,6 m + ciemne wypełnienie nad (i pod, gdy łatka wisi nad kanałem)
@@ -134,6 +138,7 @@ export default {
 
     // tablice
     L.sign('LABIRYNT LUSTER', 'Wyjście: daleko na północy', 2.9, 0.9, -5.97, 3.4, 11.5, Math.PI / 2);
+    L.sign('ŚLUZA', 'Przejście przez śluzę usuwa portale', 3.2, 0.9, 3.8, 2.9, 12.97, Math.PI);
     L.sign('I', null, 1.4, 0.9, -5.97, 4.1, 0.5, Math.PI / 2);
     L.sign('II', null, 1.6, 0.9, 31.97, 4.1, -6, -Math.PI / 2);
     L.sign('III', null, 1.8, 0.9, -11.97, 4.1, -18, Math.PI / 2);

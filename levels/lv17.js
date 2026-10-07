@@ -2,13 +2,14 @@ import { DARK_ALL } from './util.js';
 
 // Poziom 17 – „Przez szkło”.
 //
-// Hala podzielona dwiema szklanymi przegrodami (wysokość 4 m) na trzy strefy:
+// Hala podzielona dwiema szklanymi przegrodami (S: 4 m, N: 6 m) na trzy strefy:
 //   S (start, z od 16 do -2)  |  M (środek, z od -2 do -34)  |  N (wyjście, z od -34 do -52).
 // Szkło przepuszcza wzrok, ale zatrzymuje strzał. Strzał przelatuje za to przez portal –
 // więc wylot ustawiony WYSOKO (ponad szkłem) pozwala „zajrzeć” w następną strefę i postawić tam drugi portal.
 // Biała jest tylko garstka powierzchni; reszta to ciemny beton.
 //
 // Rozwiązanie (zamierzone):
+//  (nad szkłem jest siatka do sufitu – przegrody są pełnej wysokości, nie da się ich przelecieć.)
 //  1. niebieski portal na niskim pasie południowej ściany (wejście, tuż przy graczu),
 //  2. pomarańczowy na wysokim panelu tej samej ściany (wylot ponad szkłem),
 //  3. spojrzeć przez niebieski i strzelić pomarańczowym przez niego w pas podłogi w strefie M – portal przeskakuje tam,
@@ -34,16 +35,16 @@ export default {
     L.floor(-20, 20, -45, -34, 'dark');          // N
     L.floor(-20, 20, -52, -45, 'floor');         // N – pas lądowania nr 2
 
-    // ---- szklane przegrody (4 m) ----
+    // ---- szklane przegrody (S: 4 m, N: 6 m – wyższa, by nie dało się jej obejść strzałem z lotu) ----
     L.box(-20, 0, -2.15, 20, 4, -1.85, 'glass');
-    L.box(-20, 0, -34.15, 20, 4, -33.85, 'glass');
+    L.box(-20, 0, -34.15, 20, 6, -33.85, 'glass');
+    // ---- nad szkłem siatka do sufitu: wzrok i strzał przechodzą, ale przegroda jest pełnej wysokości ----
+    L.box(-20, 4, -2.15, 20, 20, -1.85, 'grate');
+    L.box(-20, 6, -34.15, 20, 20, -33.85, 'grate');
 
     // ---- strefa S: niski pas (wejście) i wysoki panel (wylot) na południowej ścianie ----
     L.box(-9, 0, 15, 9, 4, 16, 'white');
     L.box(-9, 10, 15, 9, 14, 16, 'white');
-    // fałszywe tropy: niskie łaty na bocznych ścianach (ich strzał kończy się na szkle)
-    L.box(-20, 0, 3, -19, 4, 11, 'white');
-    L.box(19, 0, 3, 20, 4, 11, 'white');
 
     // ---- strefa M: filar przy wschodniej ścianie z wysoką łatą zwróconą na północ ----
     L.box(12, 0, -19.5, 20, 18, -12, 'dark');

@@ -12,17 +12,26 @@ export default {
     L.floor(-10, 10, -1.9, 7);                        // podłoga startowa (przyjmuje portale)
     L.box(-10, -8, -2, 10, 0, -1.9, 'dark');          // osłona ściany przepaści (żeby nie dało się tam strzelać)
     L.pit(-10, 10, -9, -2);
-    L.box(-10, 0, -2, 10, 3.4, -0.6, 'dark');         // mur zasłaniający przepaść
+    L.box(-10, 0, -2, 10, 3.1, -0.6, 'dark');         // mur zasłaniający przepaść
     L.box(-1.5, 0, -0.6, 1.5, 1.3, 1.6, 'dark');      // podest do zaglądania za mur
+    // niski strop strefy startowej (4,7 m): skok z podestu (głowa 4,57 m) mieści się, ale nie da się
+    // „pompować” energii pętlą portali podłogowych ani wejść na mur ze stosu kostka+podest+skok
+    L.box(-10, 4.7, -0.6, 10, 30, 7, 'dark');
 
     // ---- brzeg 1: podłoga z łatą X, wieża, pas startowy ----
     L.floor(-10, 10, -14, -9, 'dark');
     L.floor(-10, -8, -20, -14, 'dark');
     L.floor(-8, 0, -20, -14, 'floor');                // łata X (wyjście z etapu 1)
     L.floor(0, 10, -20, -14, 'dark');
+    L.box(-9, 4.7, -21, 1, 30, -13, 'dark');          // niski strop nad łatą X (jak na starcie: bez pompy energii)
     L.floor(-10, 10, -29, -20, 'dark');
     L.floor(-10, 3, -42, -29, 'dark');
-    L.floor(3, 10, -37, -29, 'floor');                // pas wejściowy pod wieżą
+    // pas wejściowy pod wieżą: jedna mała łata 2,4 × 2,4 m – mieści tylko JEDEN portal
+    L.floor(3, 5.3, -37, -29, 'dark');
+    L.floor(7.7, 10, -37, -29, 'dark');
+    L.floor(5.3, 7.7, -37, -36.7, 'dark');
+    L.floor(5.3, 7.7, -34.3, -29, 'dark');
+    L.floor(5.3, 7.7, -36.7, -34.3, 'floor');
     L.floor(3, 10, -42, -37, 'dark');
     L.box(3, 0, -28, 10, H, -23, 'dark');             // rdzeń wieży
     L.box(3, 0, -29, 10, H, -28, 'white');            // biała ściana wieży (zwrócona na południe)
@@ -36,6 +45,7 @@ export default {
     L.floor(-10, 10, -57, -54, 'dark');
     L.floor(-10, -9, -61, -57, 'dark');
     L.floor(-9, -5, -61, -57, 'floor');               // łata N za ekranem
+    L.box(-10, 4.7, -61, -3.5, 30, -56, 'dark');      // niski strop nad łatą N
     L.floor(-5, 10, -61, -57, 'dark');
     L.floor(-10, 10, -71, -61, 'dark');
     L.box(-10, 0, -56, 2, 30, -55, 'dark');           // ekran: zasłania zachodnią część platformy przed wzrokiem z północy
@@ -45,10 +55,16 @@ export default {
     L.door('B', -2, 0, -65, 2, 4.5, -64);
 
     L.button('B', 8.5, -25.5, { y: H });
-    L.sign('KASKADA', 'trzy przepaście, trzy sztuczki', 6.4, 1.5, -5.5, 2.1, -0.55, 0);
+    L.sign('KASKADA', 'dwie przepaście, trzy sztuczki', 6.4, 1.5, -5.5, 2.1, -0.55, 0);
+    L.sign('▲  WYŻEJ', 'z góry widać więcej', 3.4, 1.2, 0, 2.3, -0.55, 0);
     L.sign('PRZYCISK', 'otwiera drzwi wyjścia', 5, 1.3, 9.95, H + 2.4, -25.5, -Math.PI / 2);
     L.sign('WYJŚCIE', 'za drzwiami', 8, 1.8, 0, 7.5, -63.95, 0);
     L.cube(0, 0, -58);
+
+    // kurtyny nad przepaściami: kostka, która spadnie, wraca na start (nie zostaje na dnie),
+    // a trzymana kostka nie przeżyje „kuriera samobójcy” do startu
+    L.fizzler(-10, -2.35, -9, 10, -1.65, -2);
+    L.fizzler(-10, -2.35, -54, 10, -1.65, -42);
   },
   solve(T) {
     const pl = T.game.player;
@@ -69,7 +85,7 @@ export default {
     T.shoot(1, 6.5, 12.3, -29);               // wyjście: wysoko na ścianie wieży
     T.walkTo(6.5, -9.5, 15); T.walkTo(6.5, -24, 15);                        // schodami na szczyt
     T.walkTo(6.5, -28.75, 5); T.wait(0.4);
-    T.shoot(0, 6.5, 0, -35.5);                // wejście: pas pod wieżą
+    T.shoot(0, 6.5, 0, -35.5);                // wejście: mała łata pod wieżą (jedyny portal podłogowy tam)
     T.assert(T.walkThrough(0), 'nie wskoczyłem w portal wieży');
     T.land(8);
     T.assert(pl.pos.z < -52 && pl.pos.y < 0.5, 'lot nie doniósł na drugi brzeg');

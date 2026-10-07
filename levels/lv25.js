@@ -27,15 +27,16 @@
 //  5. Przez niebieski: pomarańczowy patrzy na zachód przez kratkę → Z4a → łata na suficie Z4b
 //     → z sufitu, przez kratkowy dach celi, w podłogową łatę p_c.
 //  6. Wejść w niebieski, zejść z otworu w podłodze celi i stanąć na zielonym polu.
+// Wokół wysokich łat-punktów widzenia stoją klatki z kratki (patrz build) – blokują „łańcuch lotów”.
 export default {
   name: 'Okno na świat',
-  hint: 'Kratki są za wysoko, żeby zajrzeć przez nie z podłogi, a szkło zatrzymuje każdy strzał. Portal pokazuje to, co widzi jego bliźniak – gdzie go postawić, żeby patrzył ponad Twoją głową?',
+  hint: 'Kratki są za wysoko, żeby zajrzeć przez nie z podłogi, a szkło zatrzymuje każdy strzał. Co zobaczyłby ktoś, kto stoi tam, gdzie Ty nie sięgniesz?',
   spawn: { x: -6, y: 0, z: 20, yaw: 0 },
   exit: { x: -3.5, y: 0, z: -5 },
   build(L) {
     const H = 16, S = 23;
     const D = 'dark';
-    const GL = 10.5, GT = 13.7;                    // szkło do 10,5 m, kratka 10,5–13,7 m
+    const GL = 12.0, GT = 13.7;                    // szkło do 12 m, kratka 12–13,7 m
 
     L.room(-S, S, -S, S, H, { n: D, s: D, e: D, w: D, ceil: D });
 
@@ -91,6 +92,35 @@ export default {
     P(-23, 10.9, -18.5, -22, 14.1, -15.5);         // Z4a
     P(-11, 14.9, -8, -3, 16, -4);                  // Z4b – na suficie nad celą (długa wzdłuż x: łatwiej trafić z daleka)
     P(-23, 0, -12, -22, 3, -6);                    // E4 – niska
+
+    // Klatki z kratki (strzał i wzrok przechodzą, ciało nie) przed wysokimi łatami-punktami widzenia: wylot z portalu
+    // spada pionowo w dół, więc nie da się „wylecieć” i strzelać w locie z wysokiego oka (to by ominęło teleskop).
+    // Dół klatki jest otwarty – gracz wypada na podłogę. Z4b (sufit) i p_c (podłoga) zostają otwarte.
+    const FB = 4.5, FT = 12.6;                      // kolumna fizzlera w szybach: y od 4,5 do 12,6
+    const cage = (ax, fc, dir, a0, a1, y0, y1) => {
+      const D = 1.15, Tk = 0.3;
+      const mk = (n0, n1, l0, l1, yy0, yy1) => ax === 'x'
+        ? L.box(Math.min(n0, n1), yy0, l0, Math.max(n0, n1), yy1, l1, 'grate')
+        : L.box(l0, yy0, Math.min(n0, n1), l1, yy1, Math.max(n0, n1), 'grate');
+      const f1 = fc + dir * (D + Tk);
+      const yb = FB - 0.5;                           // szyb z kratki schodzi poniżej kolumny fizzlera
+      mk(fc + dir * D, f1, a0 - Tk, a1 + Tk, yb, y1 + Tk);
+      mk(fc, f1, a0 - Tk, a0, yb, y1 + Tk);
+      mk(fc, f1, a1, a1 + Tk, yb, y1 + Tk);
+      mk(fc, f1, a0, a1, y1, y1 + Tk);
+      // kolumna fizzlera na całym przekroju szybu: wylot z wysokiej łaty kasuje portale (a po 0,6 s jeszcze raz),
+      // więc nie da się „przeskakiwać” z łaty na łatę strzałami w locie – trzeba teleskopu z podłogi.
+      const fa = Math.min(fc, fc + dir * D), fb = Math.max(fc, fc + dir * D);
+      if (ax === 'x') L.fizzler(fa, FB, a0, fb, FT, a1); else L.fizzler(a0, FB, fa, a1, FT, fb);
+    };
+    cage('x', -22, 1, 14.7, 17.3, 10.9, 14.1);     // V
+    cage('z', 22, -1, -12, -8, 10.9, 14.1);        // dodatkowa wysoka (pok. 1)
+    cage('x', -2, -1, 2.5, 6.5, 10.9, 14.1);       // dodatkowa wysoka nad E1
+    cage('x', 22, -1, 14.5, 17.5, 10.9, 14.1);     // Z2a
+    cage('z', 22, -1, 12.5, 15.5, 10.9, 14.1);     // Z2b
+    cage('x', 22, -1, -18.5, -15.5, 10.9, 14.1);   // Z3b
+    cage('x', -22, 1, -18.5, -15.5, 10.9, 14.1);   // Z4a
+    cage('z', -22, 1, 12.5, 15.5, 10.9, 14.1);     // Z3a
 
     // filary w pokoju 3: pierwszy zasłania Z3b przed wzrokiem z Z3a, drugi – przed wzrokiem z niskiej łaty E3
     // (z podłogi pokoju 3 łata Z3b jest widoczna)
