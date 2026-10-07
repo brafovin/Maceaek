@@ -187,7 +187,13 @@ function clearLevel() {
   for (const m of worldMeshes) { world.remove(m); m.geometry.dispose(); }
   worldMeshes.length = 0;
   boxes.length = 0;
-  for (const o of levelObjects) { scene.remove(o); o.geometry?.dispose(); }
+  for (const o of levelObjects) {
+    scene.remove(o);
+    o.traverse(c => {
+      c.geometry?.dispose();
+      if (c.userData.sign) { c.material.map?.dispose(); c.material.dispose(); }   // tekstura tablicy jest własna dla poziomu
+    });
+  }
   levelObjects.length = 0;
   resetMechanics();
   fx.clearLevel();

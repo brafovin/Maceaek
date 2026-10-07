@@ -79,7 +79,7 @@ test('wybór poziomu: siatka, klawiatura, start poziomu', async () => {
   await enterGame();
   const s = await ui();
   ok(s.screen === null && s.inGame, 'po wejściu do gry ekrany znikają');
-  ok(await page.evaluate(() => document.getElementById('levelnum').textContent) === 'Poziom 3 / 11', 'nagłówek poziomu w HUD');
+  ok(await page.evaluate(() => document.getElementById('levelnum').textContent) === `Poziom 3 / ${await page.evaluate(() => window.game.LEVELS.length)}`, 'nagłówek poziomu w HUD');
 });
 
 test('karta wstępna poziomu i klawisz H', async () => {
