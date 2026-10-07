@@ -50,7 +50,7 @@ async function runOne(n, seed) {
     if (typeof lv.solve !== 'function') { out.err = 'brak solve()'; return out; }
     try { lv.solve(T); } catch (e) { out.err = String(e && e.message || e); }
     for (let i = 0; i < 6; i++) g.step(1 / 120);
-    out.ok = !out.err && g.exitReached();
+    out.ok = !out.err && (g.exitHit || g.exitReached());
     out.deaths = g.mech.deaths;
     out.resets = g.mech.cubeResets;
     out.state = T.st();
