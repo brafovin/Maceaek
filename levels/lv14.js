@@ -3,22 +3,27 @@ import { DARK_ALL } from './util.js';
 // Poziom 14 – „Schody z kostek”
 //
 // Układ (oś z: start przy +z, wyjście przy -z), sala x -16…16, z -46…28, h = 12:
-//   z =  28 … 16   brzeg S (start). Biała płyta na zachodniej ścianie (jedyny portal przy starcie),
-//                  kostka K1 i „cela” (x 8…16) ze szklaną ścianą, w niej kostka K2. Drzwi celi: A.
-//   z =  16 …  4   przepaść z kwasem (12 m)
-//   z =   4 … -4   wyspa: filar (białe ściany N i S), przycisk A (otwiera drzwi celi)
+//   z =  28 … 16   brzeg S (start): biała płyta na zachodniej ścianie (jedyny portal przy starcie),
+//                  kostka K1 oraz „cela” (x 8…16) ze szklaną ścianą; w celi leży K2, drzwi A zamknięte
+//   z =  16 …  4   przepaść z kwasem (12 m – nie do przeskoczenia nawet ze stosu kostek)
+//   z =   4 … -4   wyspa: filar (białe ściany N i S) oraz przycisk A, który otwiera drzwi celi
 //   z =  -4 … -16  przepaść z kwasem (12 m)
 //   z = -16 … -33  brzeg N: biała płyta na zachodniej ścianie, kostka K3
-//   z = -33 … -46  półka 2,9 m nad podłogą (wyjście). Przed nią kurtyna fizzlera od 3,6 m w górę
-//                  (żadna kostka nie może „zaginąć” na półce – wraca na start).
+//   z = -33 … -46  komora z wyjściem: półka 2,9 m nad podłogą, wejście przez okno 6 × 3,7 m
+//                  z kurtyną fizzlera (kostka wrzucona do komory wraca na start – nie zginie na półce)
 //
-// Idea: półka (2,9 m) jest za wysoka na skok ze stosu dwóch kostek (1,6 + 1,47 = 3,07 m),
-// ale na taki stos nie da się wejść z podłogi (1,6 > 1,47). Trzeba trzeciej kostki jako stopnia.
-// Wszystkie trzy kostki muszą znaleźć się przy półce, a K2 jest zamknięta w celi, której drzwi
-// otwiera przycisk na wyspie – więc ktoś (kostka) musi na nim zostać, dopóki K2 nie wyjdzie.
+// Idea: półka (2,9 m) jest za wysoka na skok z jednej kostki (0,8 + 1,47 = 2,27 m). Stos dwóch kostek
+// daje 1,6 + 1,47 = 3,07 m, ale na taki stos nie da się wejść z podłogi (1,6 m > skok 1,47 m).
+// Potrzebna jest trzecia kostka jako stopień (0,8 m) – schody z kostek: stopień, kolumna z dwóch, półka.
+// Wszystkie trzy kostki muszą trafić pod okno, a K2 jest zamknięta w celi: drzwi otwiera przycisk na
+// wyspie, więc inna kostka musi na nim leżeć, dopóki K2 nie wyjdzie. Na wyspę i na brzeg N da się
+// dostać tylko portalami (jedna para: płyta S, filar S, płyta N), więc trzeba je przestawiać w kolejności.
+//
+// Powierzchnie portalowalne (białe): płyta S, płyta N, ściany N i S filaru – wszystko niskie
+// (do 3,4 m, wyżej ciemny pas równo ze ścianą), więc portal zawsze „siedzi” na podłodze.
 export default {
   name: 'Schody z kostek',
-  hint: 'Jedna kostka to za mało, a dwie ułożone na sobie są za wysokie, żeby na nie wejść. Policz, ile ich potrzeba – i skąd wziąć te, których nie masz pod ręką.',
+  hint: 'Z jednej kostki nie dosięgniesz półki, a na wyższy stos też trzeba jakoś wejść. Policz, ile kostek potrzebujesz – i które z nich są zamknięte.',
   spawn: { x: 0, y: 0, z: 24, yaw: 0 },
   exit: { x: 0, y: 2.9, z: -39 },
   build(L) {
@@ -28,10 +33,12 @@ export default {
     L.floor(-16, 16, 16, 28, 'dark');            // brzeg S
     L.floor(-5, 5, -4, 4, 'dark');               // wyspa
     L.floor(-16, 16, -33, -16, 'dark');          // brzeg N
-    L.pit(-16, 16, 4, 16);
-    L.pit(-16, 16, -16, -4);
-    L.pit(-16, -5, -4, 4);
-    L.pit(5, 16, -4, 4);
+    for (const [x0, x1, z0, z1] of [[-16, 16, 4, 16], [-16, 16, -16, -4], [-16, -5, -4, 4], [5, 16, -4, 4]]) {
+      L.pit(x0, x1, z0, z1);
+      // „siatka” tuż nad dnem: kostka, która spadła w kwas, wraca na start
+      // (sama leżałaby na dnie na y = -5,599, czyli tuż nad progiem resetu silnika)
+      L.fizzler(x0, -6, z0, x1, -5.6, z1);
+    }
 
     // komora z wyjściem: ściana z oknem (3 × 3,7 m) nad półką 2,9 m, w oknie kurtyna fizzlera
     L.box(-16, -8, -34, -3, 12, -33, 'dark');
@@ -64,7 +71,7 @@ export default {
 
     L.cube(-5, 0, 22);       // K1
     L.cube(12.5, 0, 24);     // K2 (w celi)
-    L.cube(10, 0, -22);      // K3
+    L.cube(7, 0, -19);       // K3
 
     L.sign('DRZWI A', null, 4, 1.2, 7.99, 5.2, 19, Math.PI / 2);
     L.sign('A', 'przycisk', 1.1, 1.1, -1.49, 2.0, 0, -Math.PI / 2);

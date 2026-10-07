@@ -8,62 +8,66 @@ import { DARK_ALL } from './util.js';
 // Plan: siatka 0,5 m; wszystko, co nie jest „wolne”, jest pełną ciemną bryłą (generowaną z siatki).
 
 const H = 6, G = 0.5;
-const X0 = -8, X1 = 28, Z0 = -53, Z1 = 15;
+const X0 = -14, X1 = 34, Z0 = -53, Z1 = 15;
 
 // F = podłoga (chodzi się), C = kanał z kwasem
 const FREE = [
   // strefa startowa S (pętla korytarzy wokół bloku)
-  ['F', -6, 6, -1, 2],       // balkon nad kanałem I
+  ['F', -6, 6, -1, 2],       // balkon nad halą I
   ['F', -6, 6, 10, 13],
   ['F', -6, -3, 2, 10],
   ['F', 3, 6, 2, 10],
   ['F', -1.5, 1.5, 5, 10],   // wnęka
+  ['F', 6, 14, 6, 9],        // boczny korytarz (ślepy zaułek)
   ['C', -6, 6, -10, -1],     // hala I
   ['C', 6, 14, -7.5, -4.5],  // korytarz 2
-  // L2
+  // L2 (hala + ślepy tunel z łatką lądowania)
   ['F', 14, 26, -12, 0],
+  ['F', 26, 32, -7.5, -4.5],
   ['C', 14, 26, -21, -12],   // hala II
   ['C', 6, 14, -19.5, -16.5],// korytarz 3
   // L3
   ['F', -6, 6, -21, -12],
+  ['F', -12, -6, -19.5, -16.5],
   ['C', -6, 6, -30, -21],    // hala III
   ['C', 6, 14, -29.5, -26.5],// korytarz 4
-  ['C', 14, 26, -32, -23],   // hala IV
-  ['C', 16.5, 19.5, -41, -32],// korytarz 5
+  ['C', 14, 30, -32, -23],   // hala IV
+  ['C', 15.5, 18.5, -41, -32],// korytarz 5
   // L4
   ['F', 10, 26, -51, -41],
 ];
 // słupy (wycinają wolną przestrzeń)
 const PILLARS = [
-  [17.5, 20.5, -10, -8], [17.5, 20.5, -3.5, -1.5],     // L2
+  [17, 21, -9, -7.5], [17, 21, -3.5, -2],              // L2
   [-3, -1, -15.5, -13.5],                              // L3
-  [12, 15, -47, -44], [21, 24, -47, -44],              // L4
+  [11, 14, -47, -44], [20, 23, -47, -44],              // L4
 ];
 // łatki: f = kierunek normalnej (strona wolnej przestrzeni), p = współrzędna płaszczyzny ściany, c = środek wzdłuż ściany
 const PATCHES = {
   aS1:   { f: '+x', p: -6, c: 0.5 },
-  aS2:   { f: '-x', p: 6, c: 6 },
+  aS2:   { f: '+x', p: 3, c: 4 },
+  dS2:   { f: '-x', p: 14, c: 7.5 },
   dS1:   { f: '+z', p: 5, c: 0 },
   B1:    { f: '+x', p: -6, c: -6, canal: true },
-  dH1n:  { f: '+z', p: -10, c: -2, canal: true },
-  dH1e:  { f: '-x', p: 6, c: -2.75, canal: true },
-  f2:    { f: '-x', p: 26, c: -6 },
-  aL2:   { f: '-z', p: 0, c: 23 },
-  dL2:   { f: '+x', p: 14, c: -2 },
+  B1b:   { f: '+x', p: -6, c: -2, canal: true },
+  f2:    { f: '-x', p: 32, c: -6 },
+  aL2a:  { f: '-z', p: -9, c: 19 },
+  aL2b:  { f: '-z', p: 0, c: 23 },
   B2:    { f: '-x', p: 26, c: -18, canal: true },
-  dH2n:  { f: '+z', p: -21, c: 20, canal: true },
-  dH2w:  { f: '+x', p: 14, c: -14.5, canal: true },
-  f3:    { f: '+x', p: -6, c: -18 },
+  B2b:   { f: '-x', p: 26, c: -14, canal: true },
+  f3:    { f: '+x', p: -12, c: -18 },
   aL3:   { f: '-z', p: -12, c: 3.5 },
-  dL3:   { f: '-x', p: 6, c: -14 },
   B3:    { f: '+x', p: -6, c: -28, canal: true },
-  dH3n:  { f: '+z', p: -30, c: 0, canal: true },
-  dH3e:  { f: '-x', p: 6, c: -23.5, canal: true },
-  fMid:  { f: '-x', p: 26, c: -28, canal: true },
-  p2:    { f: '-z', p: -23, c: 18, canal: true },
-  dH4w:  { f: '+x', p: 14, c: -24.5, canal: true },
-  fEnd:  { f: '+z', p: -51, c: 18 },
+  fMid:  { f: '-x', p: 30, c: -28, canal: true },
+  p2:    { f: '-z', p: -23, c: 17, canal: true },
+  fEnd:  { f: '+z', p: -51, c: 17 },
 };
+// kratki-barierki przy halach: nie da się wyskoczyć w przestrzeń nad kanałem (strzał i wzrok przechodzą)
+const FENCE_H = 1.55; // wyższa niż skok (1,47 m), ale niższa niż oczy (1,62 m)
+const FENCES = [
+  [-5.5, 6, -1.3, -1], [14, 26, -12.3, -12], [-6, 6, -21.3, -21],   // krawędzie hal I, II, III
+];
+export const design = { FREE, PILLARS, PATCHES, FENCES, H, G, X0, X1, Z0, Z1 };
 const PY = 1.3; // wysokość celowania w łatkę
 const pt = (k) => { const q = PATCHES[k]; return q.f[1] === 'x' ? [q.p, PY, q.c] : [q.c, PY, q.p]; };
 
@@ -78,10 +82,11 @@ function patchRect(q) {
 }
 
 export default {
+  design, // dane planu (do analizy; silnik ich nie używa)
   name: 'Labirynt luster',
-  hint: 'Łatki, których szukasz, są za rogiem – z tego miejsca ich nie zobaczysz. Ale portal widzi więcej niż Ty, a Twój strzał pójdzie tam, dokąd patrzy portal.',
+  hint: 'Najważniejszych łatek nie widać zza rogu. Zerknij tam oczami portalu – a potem sprawdź, czy celownik też tamtędy sięgnie.',
   spawn: { x: 4.5, y: 0, z: 11.5, yaw: Math.PI / 2 },
-  exit: { x: 18, y: 0, z: -43 },
+  exit: { x: 17, y: 0, z: -44.5 },
   build(L) {
     L.room(X0, X1, Z0, Z1, H, DARK_ALL);
     const nx = (X1 - X0) / G, nz = (Z1 - Z0) / G;
@@ -117,6 +122,8 @@ export default {
       if (k === 'F') L.floor(x0, x1, z0, z1, 'dark'); else L.pit(x0, x1, z0, z1);
     }
 
+    for (const [x0, x1, z0, z1] of FENCES) L.box(x0, 0, z0, x1, FENCE_H, z1, 'grate');
+
     // łatki: biała płyta 0..2,6 m + ciemne wypełnienie nad (i pod, gdy łatka wisi nad kanałem)
     for (const k of Object.keys(PATCHES)) {
       const q = PATCHES[k], [x0, x1, z0, z1] = patchRect(q);
@@ -128,9 +135,9 @@ export default {
     // tablice
     L.sign('LABIRYNT LUSTER', 'Wyjście: daleko na północy', 2.9, 0.9, -5.97, 3.4, 11.5, Math.PI / 2);
     L.sign('I', null, 1.4, 0.9, -5.97, 4.1, 0.5, Math.PI / 2);
-    L.sign('II', null, 1.6, 0.9, 25.97, 4.1, -6, -Math.PI / 2);
-    L.sign('III', null, 1.8, 0.9, -5.97, 4.1, -18, Math.PI / 2);
-    L.sign('IV', null, 1.6, 0.9, 18, 4.1, -50.97, 0);
+    L.sign('II', null, 1.6, 0.9, 31.97, 4.1, -6, -Math.PI / 2);
+    L.sign('III', null, 1.8, 0.9, -11.97, 4.1, -18, Math.PI / 2);
+    L.sign('IV', null, 1.6, 0.9, 17, 4.1, -50.97, 0);
   },
   solve(T) {
     const pl = T.game.player;
@@ -170,15 +177,15 @@ export default {
     T.shoot(1, ...pt('B1')); near(1, 'B1');
     through('f2');
     enter();
-    T.assert(Math.abs(pl.pos.x - 25.5) < 1.2 && Math.abs(pl.pos.z + 6) < 2, 'nie wylądowałem w L2: ' + JSON.stringify(T.st()));
+    T.assert(Math.abs(pl.pos.x - 31.5) < 1.2 && Math.abs(pl.pos.z + 6) < 2, 'nie wylądowałem w L2: ' + JSON.stringify(T.st()));
 
     // ---- skok II: z L2 na L3 ----
-    T.walkTo(23, -6); T.walkTo(22, -10.5);
-    T.shoot(0, ...pt('aL2')); near(0, 'aL2');
+    T.walkTo(24, -6); T.walkTo(22, -10.5);
+    T.shoot(0, ...pt('aL2b')); near(0, 'aL2b');
     T.shoot(1, ...pt('B2')); near(1, 'B2');
     through('f3');
     enter();
-    T.assert(Math.abs(pl.pos.x + 5.5) < 1.2 && Math.abs(pl.pos.z + 18) < 2, 'nie wylądowałem w L3: ' + JSON.stringify(T.st()));
+    T.assert(Math.abs(pl.pos.x + 11.5) < 1.2 && Math.abs(pl.pos.z + 18) < 2, 'nie wylądowałem w L3: ' + JSON.stringify(T.st()));
 
     // ---- skok III: z L3 do L4 (łańcuch trzech strzałów) ----
     T.walkTo(0, -18); T.walkTo(2, -20);
@@ -188,7 +195,7 @@ export default {
     through('p2');
     through('fEnd');
     enter();
-    T.assert(Math.abs(pl.pos.x - 18) < 1.5 && pl.pos.z < -49, 'nie wylądowałem w L4: ' + JSON.stringify(T.st()));
-    T.walkTo(18, -43);
+    T.assert(Math.abs(pl.pos.x - 17) < 1.5 && pl.pos.z < -49, 'nie wylądowałem w L4: ' + JSON.stringify(T.st()));
+    T.walkTo(17, -44.5);
   },
 };

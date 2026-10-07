@@ -2,32 +2,38 @@ import { DARK_ALL } from './util.js';
 
 // Poziom 12 – „Dwa przyciski”
 //
-// Układ (oś z: start przy +z, wyjście przy -z):
-//   z =  22 … -2   podest startowy S: przycisk A (x=9, z=7), biała ściana po lewej (x=-11)
-//   z = -2 … -14   przepaść z kwasem (12 m – nie do przeskoczenia)
-//   z = -14 … -29  wyspa: kostka leży na przycisku B tuż przed drzwiami (z=-28.25),
-//                  szklana ściana (widać wyjście), nad nią wysoko biały pas (jedyna biała
-//                  ściana widoczna ze startu), filar, którego biała ściana patrzy od strony S (ukryta)
+// Układ (oś z: start przy +z, wyjście przy -z; podłogi i sufit ciemne – portale tylko na 3 białych bryłach):
+//   z = 26 … -2    podest startowy S: spawn (3.5, 23), przycisk A (9, 20) daleko od przepaści,
+//                  biała ściana po lewej (x=-11, z 0…12) – jedyna biała ściana po stronie startu
+//   z = -2 … -14   przepaść z kwasem (12 m) i barierka z siatki (2,6 m) na brzegu wyspy
+//   z = -14 … -29  wyspa: kostka leży na przycisku B tuż przed drzwiami (z=-28.25), szklana ściana
+//                  (widać wyjście), nad nią biały pas od y=5 (jedyna biała ściana wyspy widoczna ze startu),
+//                  filar x 5…9, którego biała ściana patrzy w stronę drzwi (niewidoczna z podestu)
 //   z = -30 … -36  komora z wyjściem za drzwiami
 //
-// Idea: drzwi wymagają A i B naraz. Drzwi stoją tuż za B, więc to GRACZ musi stać na B
-// (stojąc na B wchodzi w drzwi, a one nie zamykają się na graczu). Kostka musi więc wrócić
-// z wyspy na A po drugiej stronie przepaści.
+// Rozwiązanie: portale (niebieski wysoko na pasie, pomarańczowy na białej ścianie startu) -> wyspa ->
+// przestaw niebieski na ukrytą ścianę filaru -> kostka z B -> z powrotem na start -> kostka na A (daleko) ->
+// znów na wyspę -> stań na B (drzwi wymagają A i B naraz, a drzwi stoją tuż za B: stojąc na B wchodzisz w
+// ich obrys, więc nie zamkną się na graczu) -> wyjście.
+//
+// Zabezpieczenia: barierka (silnik przenosi trzymaną kostkę na start po śmierci gracza – bez niej dałoby się
+// „przenieść” kostkę wskakując w kwas) i odległość A od przepaści/ściany portalowej (rzut kostki nie doleci).
 export default {
   name: 'Dwa przyciski',
   hint: 'Drzwi otworzą się tylko przy dwóch wciśniętych przyciskach naraz, a przecież sam przy nich zostaniesz. Nie każda ściana, która przyjmie portal, jest widoczna z miejsca, w którym stoisz.',
-  spawn: { x: 3.5, y: 0, z: 24, yaw: 0 },
+  spawn: { x: 3.5, y: 0, z: 23, yaw: 0 },
   exit: { x: 4.5, y: 0, z: -33 },
   build(L) {
-    L.room(-12, 12, -36, 28, 14, DARK_ALL);
-    L.floor(-12, 12, -2, 28, 'dark');          // podest startowy
+    L.room(-12, 12, -36, 26, 14, DARK_ALL);
+    L.floor(-12, 12, -2, 26, 'dark');          // podest startowy
     L.floor(-12, 12, -36, -14, 'dark');        // wyspa + komora z wyjściem
     L.pit(-12, 12, -14, -2);
 
     // podest startowy: jedyna biała ściana (do samego sufitu, żeby nic nie mogło na niej leżeć)
-    L.box(-12, 0, 0, -11, 14, 6, 'white');
-    // szklana przegroda (do sufitu): rzut kostki z wyspy ani z portalu nie doleci do przycisku A
-    L.box(-12, 0, 7, 5, 14, 8, 'glass');
+    L.box(-12, 0, 0, -11, 14, 12, 'white');
+    // barierka z siatki na brzegu wyspy (2,6 m – nie do przeskoczenia nawet ze stosu z kostką): nie da się
+    // wpaść w kwas z kostką w rękach (silnik przenosi trzymaną kostkę na start); strzał przelatuje
+    L.box(-12, 0, -14.3, 12, 2.6, -14, 'grate');
 
     // ściana działowa przed komorą z wyjściem
     L.box(-12, 0, -30, -1.6, 5, -29, 'glass');
@@ -42,21 +48,19 @@ export default {
     L.box(5, 0, -25, 9, 14, -24, 'white');
 
     // przyciski i kostka
-    L.button('A', 8, 19);
+    L.button('A', 9, 20);
     L.button('B', 0, -28.25);
     L.cube(0, 0, -28.25);
 
     // tablice
     L.sign('WYJŚCIE', 'oba przyciski naraz', 5.4, 1.4, 0, 4.1, -28.95, 0);
     L.sign('B', 'przycisk', 2.2, 1.1, -3.6, 1.8, -28.95, 0);
-    L.sign('A', 'przycisk', 2.4, 1.2, 11.95, 1.9, 19, Math.PI / 2);
+    L.sign('A', 'przycisk', 2.4, 1.2, 11.95, 1.9, 20, Math.PI / 2);
   },
   solve(T) {
     const pl = T.game.player;
-    // 1) przejście przez lukę w przegrodzie i dwa portale: niebieski wysoko na białym pasie nad szkłem,
-    //    pomarańczowy na białej ścianie po lewej
-    T.walkTo(8.5, 12, 15);
-    T.walkTo(8.5, 3, 15);
+    // 1) dwa portale z miejsca startu: niebieski wysoko na białym pasie nad szkłem (jedyna biała ściana
+    //    widoczna po drugiej stronie), pomarańczowy na białej ścianie po lewej
     T.shoot(0, 0, 8, -29);
     T.shoot(1, -11, 1.5, 3);
     // 2) przez pomarańczowy na wyspę (lądujesz z góry)
@@ -72,18 +76,15 @@ export default {
     // 5) z kostką z powrotem na podest
     T.assert(T.walkThrough(0), 'nie przeszedłem przez niebieski');
     T.land(4);
-    // 6) kostka na przycisk A (za przegrodą, daleko od przepaści)
-    T.walkTo(8.5, 5, 15);
-    T.walkTo(8, 12, 15);
-    T.walkTo(8, 17, 15);
+    // 6) kostka na przycisk A (daleko od portali)
+    T.walkTo(9, 18.1, 15);
     T.face(Math.PI, 0);
     T.wait(0.6);
     T.drop();
     T.wait(1.2);
     T.assert(T.buttonPressed('A'), 'przycisk A niewciśnięty');
     // 7) z powrotem na wyspę, tym razem już bez kostki
-    T.walkTo(8.5, 12, 15);
-    T.walkTo(8.5, 4, 15);
+    T.walkTo(-8, 4, 15);
     T.assert(T.walkThrough(1), 'nie przeszedłem przez pomarańczowy (drugi raz)');
     T.land(4);
     // 8) stań na B – drzwi się otwierają – wyjście
