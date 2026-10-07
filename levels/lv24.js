@@ -17,12 +17,15 @@ import { DARK_ALL } from './util.js';
 // przytrzymać D1 przyciskiem B; a B z kolei zamyka D2 – więc do wyjścia (B i C naraz) kostkę na B
 // trzeba dostarczyć już z drugiej strony drzwi: portal EF (podłoga E) + MC (sufit nad B) to „zsyp”.
 //
-// Portalowalne są tylko dwie bryły: MC (sufit nad B, widać z M i przez kratkę z głębi E) oraz EF (podłoga E).
+// Portalowalne są tylko dwie bryły: MC (sufit nad B, widać z M przez szkło kabiny) oraz EF (podłoga E).
 // Pozostałe powierzchnie są ciemne. Przegrody to szkło (blokuje strzał i rzut), nad szkłem w M|E kratka.
 //
-// Łata EF jest duża (6×6 m) celowo: gracz wskakujący w otwór przy krawędzi łaty jest wypychany na łatę, nie w pustkę
-// (silnik liczy otwór z tolerancją, więc przy małej łacie zdarzały się upadki i śmierć). Płotek ma prześwit od wschodu.
-// Łata MC jest cienką płytą tuż pod sufitem: kostka rzucona w górę nie dosięga płaszczyzny portalu (środek ≤ 6,6 < 6,8).
+// Przycisk B stoi w szklanej kabinie otwartej od strony S (jak A): kostki nie da się na niego rzucić z daleka – zwłaszcza od bramy D2,
+// bo wtedy wystarczyłby sprint przez D2 i cała sztuczka z zsypem byłaby zbędna. Kabina zasłania też MC przed strzałem z E.
+// Łata EF (7×7 m) ma w środku ramkę z kratki: portal musi się zmieścić w jej wnętrzu, więc nigdy nie stanie przy krawędzi łaty
+// (przy krawędzi otwór wychodził poza łatę, a wypychanie z niego bywało bokiem w ciemną podłogę – wpadnięcie pod świat).
+// Ramka ma prześwit od wschodu – tamtędy podchodzi się do otworu. Łata MC jest cienką płytą tuż pod sufitem:
+// kostka rzucona w górę nie dosięga płaszczyzny portalu (środek ≤ 6,6 < 6,8).
 //
 // Rozwiązanie (≥ 19 odrębnych czynności) – patrz solve().
 const H = 7;                // wysokość hali
