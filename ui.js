@@ -668,7 +668,8 @@ function init() {
   game.autoNext = false;                         // po ukończeniu poziomu pokazujemy ekran zamiast ładować następny
   const wantsLevel = params.get('level') || params.get('lvmod');
   const last = load(LAST_KEY, null);
-  if (!wantsLevel && Number.isInteger(last) && last > 0 && last < levelCount()) game.loadLevel(last);
+  if (wantsLevel) save(LAST_KEY, game.levelIndex());      // ?level=N: „Graj/Kontynuuj” ma zacząć od tego poziomu
+  else if (Number.isInteger(last) && last > 0 && last < levelCount()) game.loadLevel(last);
   setInGame(false);
   show('title');
 }

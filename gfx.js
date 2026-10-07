@@ -193,7 +193,7 @@ export function createGfx(THREE, renderer, scene) {
 
   // ---- światło dla obiektów dynamicznych (kostki) ----
   const _c = [0, 0, 0];
-  const FACE_K = [0.86, 0.74, 1.0, 0.5, 0.8, 0.68];   // jasność ścian kostki: +x -x +y -y +z -z (kolejność BoxGeometry)
+  const CUBE_K = 0.62;   // skala koloru materiału Lambert kostki (światła sceny są mocne, świat jest wypalony)
   let frameNo = 0;
 
   // kolor światła w punkcie (liniowy) – ta sama suma świateł i AO co w wypalonym świecie
@@ -204,11 +204,9 @@ export function createGfx(THREE, renderer, scene) {
     return out;
   }
 
+  // stan oświetlenia kostki; materiał kostki należy do fx (emisja, błyski) – tu tylko mnożymy jego kolor.
+  // Cieniowanie ścian zapewniają 4 światła sceny (Lambert), a wypalone światło poziomu zmienia jasność całości.
   function litCube(mesh) {
-    const g = mesh.geometry, n = g.attributes.position.count, col = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) col.fill(FACE_K[Math.min(5, (i / 4) | 0)], i * 3, i * 3 + 3);
-    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    mesh.material = new THREE.MeshBasicMaterial({ map: mesh.material.map, vertexColors: true });
     return (mesh.userData.gfx = { r: 1, g: 1, b: 1, tr: 1, tg: 1, tb: 1, fresh: true });
   }
 
@@ -227,7 +225,7 @@ export function createGfx(THREE, renderer, scene) {
       const f = st.fresh ? 1 : k;
       st.fresh = false;
       st.r += (st.tr - st.r) * f; st.g += (st.tg - st.g) * f; st.b += (st.tb - st.b) * f;
-      m.material.color.setRGB(st.r, st.g, st.b);
+      m.material.color.setRGB(st.r * CUBE_K, st.g * CUBE_K, st.b * CUBE_K);
     }
   }
 

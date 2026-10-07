@@ -98,12 +98,14 @@ async function open(query) {
   check('odciszenie przywraca gain', (await A()).master > 0.3);
 
   // klawisz M
+  await page.evaluate(() => { document.querySelector('[data-action="play"], #btn-play')?.click?.(); window.game.setActive(true); });
   await page.keyboard.press('KeyM');
-  let toast = await page.textContent('#toast');
+  await sleep(200);
+  let toast = (await page.textContent('#toasts')).trim();
   const m1 = await page.evaluate(async () => (await import('/audio.js')).audio.isMuted());
   await page.keyboard.press('KeyM');
   const m2 = await page.evaluate(async () => (await import('/audio.js')).audio.isMuted());
-  check('klawisz M przełącza wyciszenie i pokazuje toast', m1 === true && m2 === false && toast === 'Dźwięk wyłączony', `m1=${m1} m2=${m2} toast=${toast}`);
+  check('klawisz M przełącza wyciszenie i pokazuje toast', m1 === true && m2 === false && toast.includes('Dźwięk wyłączony'), `m1=${m1} m2=${m2} toast=${toast}`);
 
   // limit głosów
   const lim = await page.evaluate(async () => {
