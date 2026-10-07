@@ -41,6 +41,7 @@ export default {
 
     L.sign('WIEŻA', '12 m', 6, 2.2, -3, 5, 8.05, 0);
     L.sign('KURTYNA', 'gasi portale', 8, 2.4, 0, 15.2, -18.95, 0);
+    L.sign('PORTALE 0 / 2', 'zacznij od nowa', 8, 2.4, 0, 15.2, -21.05, Math.PI);
   },
   solve(T) {
     const pl = T.game.player;
@@ -52,12 +53,12 @@ export default {
     T.face(0, 0);
     T.walkTo(2.75, -1.2, 40);
     T.walkTo(-3, -1.2);
-    // 3. przy samej krawędzi: wejście (niebieski) na posadzce za wieżą
-    T.creep(-3, -1.72);
-    T.shoot(0, -3, 0, -5.2);
-    // 4. zejdź z krawędzi powoli i wpadnij w portal, lot przez kurtynę
+    // 3. przy krawędzi: wejście (niebieski) na posadzce, ok. 6 m od wieży – tyle poniesie pęd marszu
+    T.walkTo(-3, -1.5); T.wait(0.5);
+    T.shoot(0, pl.pos.x, 0, -8.3);
+    // 4. zejdź z krawędzi marszem i wpadnij w portal, lot przez kurtynę
     T.face(0, 0);
-    T.run(1.5, { KeyW: 1 }, () => pl.pos.z < -2.15);
+    T.run(1.5, { KeyW: 1 }, () => pl.pos.y < 11.9);
     T.run(0.3, {}, null);
     T.run(5, {}, () => pl.onGround);
     T.assert(!T.portal(0).active && !T.portal(1).active, 'kurtyna powinna zgasić portale: ' + JSON.stringify(T.st()));

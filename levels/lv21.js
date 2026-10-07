@@ -1,54 +1,96 @@
 export default {
   name: 'Kaskada',
-  hint: 'Nie wszystko widać z posadzki – czasem trzeba zajrzeć za mur. Kto skacze z wysokości, długo pamięta, skąd leciał. A drzwi na końcu otworzy ktoś, kto nie musi ich przekraczać.',
-  spawn: { x: 0, y: 0, z: 8, yaw: 0 },
-  exit: { x: 0, y: 0, z: -65 },
+  hint: 'Z posadzki nie widać wszystkiego – podnieś wzrok. Wysokość daje pęd, a drzwi na końcu otworzy ktoś, kto nie musi przez nie przechodzić.',
+  spawn: { x: 0, y: 0, z: 5.5, yaw: 0 },
+  exit: { x: 0, y: 0, z: -68 },
   build(L) {
     const H = 14;             // wysokość wieży
     const N = 28, D = 0.45;   // schody: 28 stopni po 0,5 m
-    L.room(-10, 10, -68, 11, 30, { n: 'dark', s: 'dark', e: 'dark', w: 'dark', ceil: 'dark' });
+    L.room(-10, 10, -71, 7, 30, { n: 'dark', s: 'dark', e: 'dark', w: 'dark', ceil: 'dark' });
 
     // ---- etap 1: mur z podestem i przepaść A ----
-    L.floor(-10, 10, -2, 11);                         // podłoga startowa (przyjmuje portale)
+    L.floor(-10, 10, -1.9, 7);                        // podłoga startowa (przyjmuje portale)
+    L.box(-10, -8, -2, 10, 0, -1.9, 'dark');          // osłona ściany przepaści (żeby nie dało się tam strzelać)
     L.pit(-10, 10, -9, -2);
     L.box(-10, 0, -2, 10, 3.4, -0.6, 'dark');         // mur zasłaniający przepaść
     L.box(-1.5, 0, -0.6, 1.5, 1.3, 1.6, 'dark');      // podest do zaglądania za mur
-    L.box(9.5, 4.5, -9, 10, 9.5, -5, 'white');        // biała tablica na ścianie nad przepaścią (wabik)
 
     // ---- brzeg 1: podłoga z łatą X, wieża, pas startowy ----
-    L.floor(-10, 10, -12, -9, 'dark');
-    L.floor(-10, -8, -18, -12, 'dark');
-    L.floor(-8, 0, -18, -12, 'floor');                // łata X (wyjście z etapu 1)
-    L.floor(0, 10, -18, -12, 'dark');
-    L.floor(-10, 10, -29, -18, 'dark');
-    L.floor(-10, 3, -40, -29, 'dark');
+    L.floor(-10, 10, -14, -9, 'dark');
+    L.floor(-10, -8, -20, -14, 'dark');
+    L.floor(-8, 0, -20, -14, 'floor');                // łata X (wyjście z etapu 1)
+    L.floor(0, 10, -20, -14, 'dark');
+    L.floor(-10, 10, -29, -20, 'dark');
+    L.floor(-10, 3, -42, -29, 'dark');
     L.floor(3, 10, -37, -29, 'floor');                // pas wejściowy pod wieżą
-    L.floor(3, 10, -40, -37, 'dark');
+    L.floor(3, 10, -42, -37, 'dark');
     L.box(3, 0, -28, 10, H, -23, 'dark');             // rdzeń wieży
     L.box(3, 0, -29, 10, H, -28, 'white');            // biała ściana wieży (zwrócona na południe)
     for (let i = 1; i <= N; i++) L.box(3, 0, -23, 10, 0.5 * i, -23 + D * (N - i + 1), 'dark');
 
     // ---- przepaść B ----
-    L.pit(-10, 10, -52, -40);
+    L.pit(-10, 10, -54, -42);
+    L.box(-10, 0, -42, 10, 1.2, -41.7, 'grate');      // barierka przy przepaści B (biegacz się zatrzyma)
 
-    // ---- brzeg 2: platforma, wnęka, drzwi ----
-    L.floor(-10, 10, -55, -52, 'dark');
-    L.floor(-10, -9, -58, -55, 'dark');
-    L.floor(-9, -5, -58, -55, 'floor');               // łata N we wnęce
-    L.floor(-5, 10, -58, -55, 'dark');
-    L.floor(-10, 10, -68, -58, 'dark');
-    L.box(-10, 0, -54, -3, 4, -53, 'dark');           // wnęka: ściana północna
-    L.box(-10, 0, -60, -3, 4, -59, 'dark');           // wnęka: ściana południowa
-    L.box(-10, 2.8, -60, -3, 4, -53, 'dark');         // wnęka: dach
-    L.box(-10, 0, -62, -2, 30, -61, 'dark');
-    L.box(2, 0, -62, 10, 30, -61, 'dark');
-    L.box(-2, 4.5, -62, 2, 30, -61, 'dark');
-    L.door('B', -2, 0, -62, 2, 4.5, -61);
+    // ---- brzeg 2: platforma, ekran z łatą N za nim, drzwi ----
+    L.floor(-10, 10, -57, -54, 'dark');
+    L.floor(-10, -9, -61, -57, 'dark');
+    L.floor(-9, -5, -61, -57, 'floor');               // łata N za ekranem
+    L.floor(-5, 10, -61, -57, 'dark');
+    L.floor(-10, 10, -71, -61, 'dark');
+    L.box(-10, 0, -56, 2, 30, -55, 'dark');           // ekran: zasłania zachodnią część platformy przed wzrokiem z północy
+    L.box(-10, 0, -65, -2, 30, -64, 'dark');
+    L.box(2, 0, -65, 10, 30, -64, 'dark');
+    L.box(-2, 4.5, -65, 2, 30, -64, 'dark');
+    L.door('B', -2, 0, -65, 2, 4.5, -64);
 
     L.button('B', 8.5, -25.5, { y: H });
-    L.cube(0, 0, -56.5);
+    L.sign('KASKADA', 'trzy przepaście, trzy sztuczki', 6.4, 1.5, -5.5, 2.1, -0.55, 0);
+    L.sign('PRZYCISK', 'otwiera drzwi wyjścia', 5, 1.3, 9.95, H + 2.4, -25.5, -Math.PI / 2);
+    L.sign('WYJŚCIE', 'za drzwiami', 8, 1.8, 0, 7.5, -63.95, 0);
+    L.cube(0, 0, -58);
   },
   solve(T) {
-    return T;
+    const pl = T.game.player;
+    const hold = () => T.game.mech.held;
+    // ---- etap 1: zajrzeć za mur i przejść przez przepaść A ----
+    T.walkTo(0, 3.2); T.face(0, 0);
+    T.run(0.5, { KeyW: 1, Space: 1 }, () => pl.onGround && pl.pos.y > 1);   // wskok na podest
+    T.run(0.4, { KeyW: 1 }); T.face(0, 0);                                  // pod sam mur
+    T.shoot(0, 4, 0, 4);                      // niebieski: posadzka przed murem
+    T.jump(); T.run(0.2, {});                 // w skoku widać łatę X za murem
+    T.shoot(1, -4, 0, -17);                   // pomarańczowy: łata X po drugiej stronie
+    T.run(2, {}, () => pl.onGround);
+    T.walkTo(3, 2.5);
+    T.assert(T.walkThrough(0), 'nie przeszedłem przez portal A');
+    T.face(0, 0); T.run(0.6, { KeyW: 1 }); T.land(5);
+    // ---- etap 2: wieża i lot przez przepaść B ----
+    T.walkTo(0, -20, 10); T.walkTo(1, -34, 10);
+    T.shoot(1, 6.5, 12.3, -29);               // wyjście: wysoko na ścianie wieży
+    T.walkTo(6.5, -9.5, 15); T.walkTo(6.5, -24, 15);                        // schodami na szczyt
+    T.walkTo(6.5, -28.75, 5); T.wait(0.4);
+    T.shoot(0, 6.5, 0, -35.5);                // wejście: pas pod wieżą
+    T.assert(T.walkThrough(0), 'nie wskoczyłem w portal wieży');
+    T.land(8);
+    T.assert(pl.pos.z < -52 && pl.pos.y < 0.5, 'lot nie doniósł na drugi brzeg');
+    // ---- etap 3: kostka na przycisk na wieży ----
+    T.grab(0);
+    T.walkTo(1, -59, 5);
+    T.shoot(1, -7, 0, -59);                   // pomarańczowy: łata N we wnęce (niebieski zostaje na pasie)
+    T.assert(T.walkThrough(1), 'nie przeszedłem przez portal wnęki');
+    T.face(Math.PI, 0); T.run(0.7, { KeyW: 1 }); T.land(3);
+    T.assert(hold(), 'kostka powinna być w rękach');
+    T.walkTo(3.6, -33, 3);
+    T.shoot(1, 6.5, 12.3, -29);               // pomarańczowy z powrotem na wieżę
+    T.walkTo(1, -30, 6); T.walkTo(1, -9.5, 10); T.walkTo(6.5, -9.5, 8);
+    T.walkTo(6.5, -22.5, 30);                 // schodami z kostką
+    T.assert(hold(), 'kostka wypadła na schodach');
+    T.walkTo(8.5, -23.0, 5); T.face(0, -0.3); T.wait(0.5);
+    T.drop(); T.wait(1.2);
+    T.assert(T.buttonPressed('B'), 'przycisk niewciśnięty');
+    T.walkTo(6.5, -28.75, 5); T.wait(0.4);
+    T.assert(T.walkThrough(0), 'nie wskoczyłem w portal wieży (2)');
+    T.land(8);
+    T.walkTo(0, -68, 15);
   },
 };
