@@ -8,12 +8,14 @@ import { DARK_ALL } from './util.js';
 // południowej krawędzi marszem i wpada w portal po 12 m spadku. Posadzka na północ od wieży jest ciemna,
 // więc nie da się zrobić pętli ściana–podłoga na krótkim rozbiegu. Dach nad wierzchem blokuje skok.
 // Po drugiej stronie portale znikają, a jedyne portalowalne powierzchnie to dwie łatki na tylnej
-// (północnej) stronie muru, niewidoczne z początku. Na półkę z wyjściem trzeba wejść z biegu i ze skokiem tuż przed portalem.
+// (północnej) stronie muru, niewidoczne z początku. Wylot z wysokiej łatki jest 3 m nad półką z wyjściem,
+// która stoi 7,5 m od muru: bez skoku albo bez biegu (Shift, także w powietrzu) zabraknie ok. 2 m,
+// więc trzeba wbiec w niski portal i wybić się tuż przed nim.
 export default {
   name: 'Przez fizzler',
   hint: 'Kurtyna gasi portale, ale nie pęd. Po drugiej stronie zaczynasz od zera, więc rozejrzyj się uważnie, zanim ruszysz dalej.',
   spawn: { x: 8, y: 0, z: 22, yaw: 0 },
-  exit: { x: 10, y: 6.5, z: -31 },
+  exit: { x: 10, y: 6.5, z: -32 },
   build(L) {
     L.room(-12, 12, -45, 26, 18, DARK_ALL);
     // strefa początkowa: biała podłoga, przepaść 9 m, mur z oknem
@@ -50,11 +52,13 @@ export default {
     // łatki na północnej stronie muru (widoczne dopiero zza kurtyny)
     L.box(-11.6, 0, -21.5, -9.4, 11.4, -21, 'white');   // lewa – wysoka (nisko wejście, wysoko pułapka)
     L.box(9.4, 9.4, -21.5, 11.6, 11.9, -21, 'white');   // prawa – wysoko, nad szczeliną
-    // półka z wyjściem (6,5 m od muru)
-    L.box(8, 0, -34.5, 12, 6.5, -27.5, 'dark');
+    // półka z wyjściem (7,5 m od muru)
+    L.box(8, 0, -35.5, 12, 6.5, -28.5, 'dark');
 
     // oznaczenie celu na przedniej ścianie półki – widać je po obrocie w hali
-    L.sign('WYJŚCIE', '', 4, 1.4, 10, 4, -27.45, 0);
+    L.sign('WYJŚCIE', '', 3.8, 1.8, 10, 4.6, -28.45, 0);
+    L.sign('WYJŚCIE', 'na półce', 6, 2.2, 7.95, 4.4, -32, -Math.PI / 2);
+    L.sign('WYJŚCIE', 'na półce', 8, 3, 10, 9, -44.95, 0);
     L.sign('WIEŻA', '12 m', 6, 2.2, -3, 5, 8.05, 0);
     L.sign('KURTYNA', '', 8, 2.4, 0, 15.2, -18.95, 0);
     L.sign('PORTALE 0 / 2', 'zacznij od nowa', 8, 2.4, 0, 15.2, -21.05, Math.PI);
@@ -97,6 +101,6 @@ export default {
     T.assert(pl.pos.y > 6, 'powinieneś wylecieć z wysokiego portalu: ' + JSON.stringify(T.st()));
     T.run(1.5, { KeyW: 1 }, () => pl.onGround);
     T.land(5);
-    T.walkTo(10, -31);
+    T.walkTo(10, -32);
   },
 };

@@ -80,6 +80,11 @@ export default {
 
     // ---- C: półka ----
     L.floor(-18, 18, -34, -26, 'dark');
+    // barierki z kratek na krawędziach nad kwasem (hala B od strony przepaści A i półka): przypadkowy upadek po zdjęciu
+    // K1 z przycisku A (D1 zamknięte) zostawiłby gracza bez kostek w hali A; barierki 4 m – nie do przeskoczenia
+    L.box(-18, 0, -8.3, 18, 4, -8.0, 'grate');
+    L.box(-18, 0, -34.0, 4, 4, -33.7, 'grate');
+    L.box(14, 0, -34.0, 18, 4, -33.7, 'grate');
     L.box(-18, 0, -33, -17, 3.4, -27, 'white');           // X
     L.cube(-8, 0, -29);                                   // K3
 
@@ -254,8 +259,8 @@ export default {
     T.wait(0.3);
     T.shoot(0, -6, 0, -60);
     // 11. przycisk czasowy T (5 s) w komorze, potem biegiem przez IP -> FN -> drzwi D4 -> pole wyjścia
-    T.walkTo(6.8, -44); T.wait(0.3);
-    T.walkTo(8.4, -39.5, 5, true);
+    T.walkTo(8.4, -44); T.walkTo(5.6, -44); T.wait(0.3);   // wnęka: tylko gracz się zmieści
+    T.walkTo(7.6, -44, 5, true); T.walkTo(7.2, -40.2, 5, true);   // (omiń kostkę F)
     T.assert(T.walkThrough(1, { run: true }), 'nie wszedłem w IP');
     T.face(Math.PI / 2, 0); T.run(0.5, { KeyW: 1, ShiftLeft: 1 });
     T.walkTo(-14, -59, 15, true);

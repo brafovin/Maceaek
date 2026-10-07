@@ -10,7 +10,7 @@
 // „widzi oczami bliźniaka”, a strzał przez portal leci stamtąd. Wysoka łata na ścianie naprzeciw okna
 // = punkt widzenia ponad podłogą. Cała reszta to ciemny beton; celę wyjścia zamyka szkło i kratkowy dach.
 //
-// Łaty (wysokość środka 12,5 m): V (pokój 1, zachód), Z2a (pokój 2, wschód), Z2b (pokój 2, południe),
+// Łaty (wysokie: y 11,1–13,5, środek portalu ok. 12,3 m): V (pokój 1, zachód), Z2a (pokój 2, wschód), Z2b (pokój 2, południe),
 // Z3a (pokój 3, północ, przy rogu), Z3b (pokój 3, wschód), Z4a (pokój 4, zachód), Z4b (sufit nad celą),
 // p_c (podłoga celi). Niskie łaty (wejścia): E1..E4 + trzy atrapy w pokoju 1 (D1, D2, D3).
 // Graf widoczności (łata → łaty widoczne z jej oczu, sprawdzone skryptem):
@@ -97,11 +97,13 @@ export default {
 
     // Szyby z kratki (strzał i wzrok przechodzą, ciało nie) przed wysokimi łatami-punktami widzenia: wylot z portalu
     // spada pionowo w dół, a w szybie stoi fizzler (y 4,5–12,6), który kasuje portale zaraz po wylocie i jeszcze raz po 0,6 s.
-    // Wysokie oko jest więc tylko chwilę (< 0,25 s, ponad szkłem okna), a portale z tego czasu i tak znikają, nim gracz do nich dojdzie.
+    // Dach szybu leży na y = 13,5 (tuż nad łatą), więc nawet wylot ze skokiem unosi stopy najwyżej do ok. 11,7 m, a powrót do portalu
+    // (środek 12,3 m) trwa dłużej, niż gracz zdąży – nie da się „przeskakiwać” z łaty na łatę ani utrzymać wysokości w okienku
+    // cooldownu fizzlera (0,6 s). Szyb jest głęboki (1,9 m), by odbicie od przedniej kratki nie skracało powrotu.
     // Dół szybu jest otwarty – gracz wypada na podłogę. Z4b (sufit) i p_c (podłoga) zostają otwarte.
     const FB = 4.5, FT = 12.6;                      // kolumna fizzlera w szybach: y od 4,5 do 12,6
-    const cage = (ax, fc, dir, a0, a1, y0, y1) => {
-      const D = 1.15, Tk = 0.3;
+    const cage = (ax, fc, dir, a0, a1, y0, y1, D = 1.9) => {
+      const Tk = 0.3;
       const mk = (n0, n1, l0, l1, yy0, yy1) => ax === 'x'
         ? L.box(Math.min(n0, n1), yy0, l0, Math.max(n0, n1), yy1, l1, 'grate')
         : L.box(l0, yy0, Math.min(n0, n1), l1, yy1, Math.max(n0, n1), 'grate');
@@ -123,7 +125,7 @@ export default {
     cage('z', 22, -1, 12.5, 15.5, 11.1, 13.5);     // Z2b
     cage('x', 22, -1, -18.5, -15.5, 11.1, 13.5);   // Z3b
     cage('x', -22, 1, -18.5, -15.5, 11.1, 13.5);   // Z4a
-    cage('z', -22, 1, 12.5, 15.5, 11.1, 13.5);     // Z3a
+    cage('z', -22, 1, 12.5, 15.5, 11.1, 13.5, 1.15);  // Z3a (płytszy: głęboki szyb odsłaniałby z tego miejsca łatę Z4a przez okno)
 
     // filary w pokoju 3: pierwszy zasłania Z3b przed wzrokiem z Z3a, drugi – przed wzrokiem z niskiej łaty E3
     // (z podłogi pokoju 3 łata Z3b jest widoczna)

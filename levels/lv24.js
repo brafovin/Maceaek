@@ -24,7 +24,7 @@ import { DARK_ALL } from './util.js';
 // bo wtedy wystarczyłby sprint przez D2 i cała sztuczka z zsypem byłaby zbędna. Kabina zasłania też MC przed strzałem z E.
 // Łata EF (7×7 m) ma w środku ramkę z kratki: portal musi się zmieścić w jej wnętrzu, więc nigdy nie stanie przy krawędzi łaty
 // (przy krawędzi otwór wychodził poza łatę, a wypychanie z niego bywało bokiem w ciemną podłogę – wpadnięcie pod świat).
-// Ramka ma prześwit od wschodu – tamtędy podchodzi się do otworu. Łata MC jest cienką płytą tuż pod sufitem:
+// Ramka ma prześwit od wschodu (1,0 m: gracz 0,6 m przechodzi, a portal potrzebuje ok. 1,24 m, więc nie da się go postawić w pasie za prześwitem) – tamtędy podchodzi się do otworu. Łata MC jest cienką płytą tuż pod sufitem:
 // kostka rzucona w górę nie dosięga płaszczyzny portalu (środek ≤ 6,6 < 6,8).
 //
 // Rozwiązanie (≥ 19 odrębnych czynności) – patrz solve().
@@ -54,7 +54,7 @@ export default {
     L.floor(EF.x1, 16, EF.z0, EF.z1, 'dark');
     L.floor(EF.x0, EF.x1, EF.z0, EF.z1, 'floor');
     // Wewnętrzna ramka z kratki (h 0,95 m): portal musi się zmieścić w jej środku, więc nigdy nie stanie przy krawędzi łaty
-    // (tuż przy krawędzi wpadnięcie w otwór bywało wypychane bokiem w ciemną podłogę). Prześwit od wschodu – wejście w otwór.
+    // (tuż przy krawędzi wpadnięcie w otwór bywało wypychane bokiem w ciemną podłogę). Prześwit od wschodu (±0,5 m od osi) – wejście w otwór; zbyt wąski, by postawić tam portal.
     const RI = 1.25, RT = 0.3, RH = 0.95;
     const rx0 = EF.x0 + RI, rx1 = EF.x1 - RI, rz0 = EF.z0 + RI, rz1 = EF.z1 - RI;
     const cz = (EF.z0 + EF.z1) / 2;

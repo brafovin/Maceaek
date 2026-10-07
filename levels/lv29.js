@@ -78,7 +78,7 @@ const ROOM_N = -98;
 
 export default {
   name: 'Rękawica',
-  hint: 'Cztery próby, jedna po drugiej. Nie wszystko da się zabrać ze sobą – a kurtyna nie wybacza. Wysokość zamienia się w pęd.',
+  hint: 'Cztery próby, jedna po drugiej, każda z innej bajki. Nie wszystko da się zabrać ze sobą – a kurtyna nie wybacza.',
   spawn: { x: -6, y: 0, z: 20, yaw: 0.35 },
   exit: { x: 6, y: 0, z: S4.wz - 4.5 },
   build(L) {
@@ -290,11 +290,15 @@ function buildS3(L) {
 function buildS4(L) {
   const { x0, x1, z0, z1, top, zE, zF, wz } = S4;
   const n = top / 0.5, sEnd = z0 + n * TREAD;
-  floorWithPatches(L, -14, 14, zE, ZW, [[3.75, 6.25, z1 + 0.75, z1 + 3.25]]);   // BP: łatka przed wieżą
+  // BP: łatka przed wieżą. Pas przed północną ścianą wieży (x -0,3..14, z zE..z0) jest dołem: kostka wyrzucona z portalu
+  // spada na dno przepaści (schody powrotne), a nie na niedostępny pływający pasek
+  floorWithPatches(L, -14, 14, z0, ZW, [[3.75, 6.25, z1 + 0.75, z1 + 3.25]]);
+  floorWithPatches(L, -14, -0.3, zE, z0, []);
+  L.box(-0.3, -8, zE, 14, -3, z0, 'dark');
   safePit(L, -14, 14, zF, zE, 3);
   L.floor(-14, 14, ROOM_N, zF, 'dark');                     // lądowisko i strefa wyjścia
   edge(L, zF - 0.5, zF);
-  edge(L, zE, zE + 0.5);
+  L.box(-14, 0, zE, -0.3, 0.04, zE + 0.5, 'white');
   // wieża: ciemna, tylko wysoko na północnej ścianie biały pas
   L.box(x0, 0, z0, x1, top, z1, 'dark');
   L.box(x0, 3.5, z0 - 0.3, x1, top - 0.2, z0, 'white');
