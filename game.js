@@ -1,8 +1,15 @@
 import * as THREE from './vendor/three.module.js';
 import allLevels from './levels/index.js';
+import { createGfx, readQuality, writeQuality } from './gfx.js';
+import * as fx from './fx.js';
+import { audio, gameAudio } from './audio.js';
 
 const LEVELS = [...allLevels];
 const params = new URLSearchParams(location.search);
+
+// emiter zdarzeń dla interfejsu (ui.js): levelstart, levelcomplete, death, toast, pause, resume, lockerror
+const events = new EventTarget();
+function emit(type, detail = {}) { events.dispatchEvent(new CustomEvent(type, { detail })); }
 
 /* ==========================================================================
    Maceaek – komora testowa z działem portalowym
@@ -21,7 +28,7 @@ const STEP_H = 0.55;         // automatyczne wchodzenie na schodki
 const PORTAL_HW = 0.65;      // połowa szerokości portalu
 const PORTAL_HH = 1.15;      // połowa wysokości portalu
 const PORTAL_MIN_EXIT = 3.5; // minimalna prędkość wylotu z portalu
-const MAX_DEPTH = 2;         // ile poziomów „portal w portalu” jest renderowane
+let MAX_DEPTH = 2;           // ile poziomów „portal w portalu” jest renderowane (preset jakości)
 const NEAR = 0.03;
 const ACID_Y = -5;
 
@@ -44,8 +51,10 @@ renderer.setClearColor(0x05070a);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, 1, NEAR, 250);
 camera.rotation.order = 'YXZ';
+fx.init({ scene, camera, renderer, COLORS, PORTAL_HW, PORTAL_HH, EYE_H, ACID_Y });
 
-// oświetlenie sceny
+// oświetlenie sceny – świat ma światło wypalone w kolorach wierzchołków (gfx.js), te światła dotyczą
+// tylko materiałów Lambert (np. podstawa przycisku)
 scene.add(new THREE.AmbientLight(0xffffff, 1.15));
 scene.add(new THREE.HemisphereLight(0xdfeaff, 0x6b7280, 0.9));
 const sun = new THREE.DirectionalLight(0xffffff, 1.5);
@@ -75,53 +84,9 @@ function speckle(g, s, n, alpha) {
   }
 }
 
-const texWhite = makeCanvasTexture(256, (g, s) => {
-  g.fillStyle = '#e6eaee'; g.fillRect(0, 0, s, s);
-  speckle(g, s, 500, 0.05);
-  g.strokeStyle = '#aab3bc'; g.lineWidth = 5; g.strokeRect(2.5, 2.5, s - 5, s - 5);
-  g.strokeStyle = '#f7f9fb'; g.lineWidth = 2; g.strokeRect(7, 7, s - 14, s - 14);
-  g.fillStyle = '#c3cad1';
-  for (const [x, y] of [[16, 16], [s - 16, 16], [16, s - 16], [s - 16, s - 16]]) { g.beginPath(); g.arc(x, y, 3, 0, 7); g.fill(); }
-});
-const texFloor = makeCanvasTexture(256, (g, s) => {
-  g.fillStyle = '#c9ced4'; g.fillRect(0, 0, s, s);
-  speckle(g, s, 900, 0.07);
-  g.strokeStyle = '#8f98a2'; g.lineWidth = 5; g.strokeRect(2.5, 2.5, s - 5, s - 5);
-  g.strokeStyle = '#dde1e6'; g.lineWidth = 2; g.strokeRect(7, 7, s - 14, s - 14);
-});
-const texDark = makeCanvasTexture(256, (g, s) => {
-  g.fillStyle = '#272b30'; g.fillRect(0, 0, s, s);
-  speckle(g, s, 700, 0.06);
-  g.strokeStyle = '#14171a'; g.lineWidth = 6; g.strokeRect(3, 3, s - 6, s - 6);
-  g.strokeStyle = '#3a4047'; g.lineWidth = 2; g.strokeRect(9, 9, s - 18, s - 18);
-  g.strokeStyle = '#3a4047'; g.lineWidth = 3;
-  g.beginPath(); g.moveTo(24, s - 24); g.lineTo(s - 24, 24); g.moveTo(24, 24); g.lineTo(s - 24, s - 24); g.stroke();
-});
-
-const texGrate = makeCanvasTexture(128, (g, s) => {
-  g.clearRect(0, 0, s, s);
-  g.strokeStyle = '#d5dde5'; g.lineWidth = 8;
-  for (let i = 0; i <= 2; i++) {
-    g.beginPath(); g.moveTo(i * s / 2, 0); g.lineTo(i * s / 2, s); g.moveTo(0, i * s / 2); g.lineTo(s, i * s / 2); g.stroke();
-  }
-});
-const texDoor = makeCanvasTexture(256, (g, s) => {
-  g.fillStyle = '#2b3036'; g.fillRect(0, 0, s, s);
-  g.strokeStyle = '#ff9a2e'; g.lineWidth = 14;
-  for (let i = -s; i < s * 2; i += 64) { g.beginPath(); g.moveTo(i, s); g.lineTo(i + s, 0); g.stroke(); }
-  g.fillStyle = 'rgba(20,24,28,.82)'; g.fillRect(24, 24, s - 48, s - 48);
-  g.strokeStyle = '#59606a'; g.lineWidth = 4; g.strokeRect(24, 24, s - 48, s - 48);
-});
-
-// rodzaje powierzchni: portalable = przyjmuje portale, shootThrough = strzał przelatuje (kratka)
-const MATS = {
-  white: { mat: new THREE.MeshLambertMaterial({ map: texWhite }), portalable: true, tile: 2 },
-  floor: { mat: new THREE.MeshLambertMaterial({ map: texFloor }), portalable: true, tile: 2 },
-  dark:  { mat: new THREE.MeshLambertMaterial({ map: texDark }),  portalable: false, tile: 2 },
-  door:  { mat: new THREE.MeshLambertMaterial({ map: texDoor }),  portalable: false, tile: 2 },
-  glass: { mat: new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.2, depthWrite: false }), portalable: false, tile: 2 },
-  grate: { mat: new THREE.MeshBasicMaterial({ map: texGrate, transparent: true, alphaTest: 0.35, side: THREE.DoubleSide }), portalable: false, tile: 1, shootThrough: true },
-};
+// materiały i tekstury świata, wypalone światło, lampy, mgła, presety jakości – gfx.js
+const gfx = createGfx(THREE, renderer, scene);
+const MATS = gfx.MATS;
 
 // ----------------------------------------------------------------- świat ----
 const world = new THREE.Group();
@@ -133,18 +98,9 @@ const levelAnim = {};
 
 function addBox(x0, y0, z0, x1, y1, z1, kind = 'white') {
   const m = MATS[kind];
+  // ten mesh służy do raycastu i drzwi; wygląd świata powstaje w gfx.bake (wypalone światło)
   const geo = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0);
   geo.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
-  // UV we współrzędnych świata, żeby sąsiednie ściany miały spójną siatkę
-  const p = geo.attributes.position, n = geo.attributes.normal, uv = geo.attributes.uv;
-  for (let i = 0; i < p.count; i++) {
-    const ax = Math.abs(n.getX(i)), ay = Math.abs(n.getY(i));
-    let u, v;
-    if (ax > 0.5) { u = p.getZ(i); v = p.getY(i); }
-    else if (ay > 0.5) { u = p.getX(i); v = p.getZ(i); }
-    else { u = p.getX(i); v = p.getY(i); }
-    uv.setXY(i, u / m.tile, v / m.tile);
-  }
   const mesh = new THREE.Mesh(geo, m.mat);
   const box = {
     min: new THREE.Vector3(x0, y0, z0),
@@ -167,10 +123,6 @@ function addObject(obj) {
   return obj;
 }
 
-const lightMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-const acidMat = new THREE.MeshBasicMaterial({ color: 0x78e03a, transparent: true, opacity: 0.92 });
-const padMat = new THREE.MeshBasicMaterial({ color: 0x4ade80 });
-const padRingMat = new THREE.MeshBasicMaterial({ color: 0xbbf7d0 });
 const WALL_T = 2;
 
 function addSign(text, sub, w, h, x, y, z, ry = 0) {
@@ -208,12 +160,7 @@ const LevelAPI = {
     addBox(x0 - T, -8, z0, x0, h, z1, k.w);
     addBox(x1, -8, z0, x1 + T, h, z1, k.e);
     addBox(x0 - T, h, z0 - T, x1 + T, h + 2, z1 + T, k.ceil);
-    for (let x = x0 + 4; x < x1; x += 8) for (let z = z0 + 4; z < z1; z += 8) {
-      const l = new THREE.Mesh(new THREE.PlaneGeometry(3.5, 3.5), lightMat);
-      l.rotation.x = Math.PI / 2;
-      l.position.set(x, h - 0.02, z);
-      addObject(l);
-    }
+    for (let x = x0 + 4; x < x1; x += 8) for (let z = z0 + 4; z < z1; z += 8) gfx.addLamp(x, h, z);
   },
   floor(x0, x1, z0, z1, kind = 'floor') { return addBox(x0, -8, z0, x1, 0, z1, kind); },
   // kostka (y = wysokość podłoża, na którym leży)
@@ -229,59 +176,29 @@ const LevelAPI = {
   // dół z kwasem – dziurę w podłodze tworzą sąsiednie floor()
   pit(x0, x1, z0, z1) {
     addBox(x0, -8, z0, x1, -6, z1, 'dark');
-    const acid = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), acidMat);
-    acid.rotation.x = -Math.PI / 2;
-    acid.position.set((x0 + x1) / 2, ACID_Y, (z0 + z1) / 2);
-    addObject(acid);
+    gfx.addPit(x0, x1, z0, z1);
+    addObject(fx.makeAcid(x0, x1, z0, z1));
   },
 };
 
 function clearLevel() {
+  gfx.clear();
   for (const m of worldMeshes) { world.remove(m); m.geometry.dispose(); }
   worldMeshes.length = 0;
   boxes.length = 0;
   for (const o of levelObjects) { scene.remove(o); o.geometry?.dispose(); }
   levelObjects.length = 0;
   resetMechanics();
-  for (const e of effects.splice(0)) { scene.remove(e.mesh); e.mesh.geometry.dispose(); e.mesh.material.dispose(); }
+  fx.clearLevel();
 }
 
 // ---------------------------------------------------------------- portale ----
 const DUMMY_TEX = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
 DUMMY_TEX.needsUpdate = true;
 
-const portalVert = /* glsl */`
-  varying vec2 vP;
-  varying vec4 vClip;
-  void main() {
-    vP = position.xy;
-    vec4 mv = modelViewMatrix * vec4(position, 1.0);
-    vClip = projectionMatrix * mv;
-    gl_Position = vClip;
-  }
-`;
-const portalFrag = /* glsl */`
-  uniform sampler2D tMap;
-  uniform vec3 uColor;
-  uniform float uTime;
-  uniform float uUseTex;
-  varying vec2 vP;
-  varying vec4 vClip;
-  void main() {
-    float r = length(vP);
-    vec2 suv = vClip.xy / vClip.w * 0.5 + 0.5;
-    vec3 view = texture2D(tMap, suv).rgb;
-    vec3 inner = mix(uColor * 0.22, view, uUseTex);
-    float a = atan(vP.y, vP.x);
-    float wob = 0.5 + 0.5 * sin(a * 5.0 - uTime * 5.0) * sin(a * 3.0 + uTime * 3.0);
-    vec3 glow = uColor * (1.1 + 0.9 * wob) + vec3(0.12);
-    float ring = smoothstep(0.72, 0.84, r);
-    vec3 col = mix(inner, glow, ring);
-    float alpha = 1.0 - smoothstep(0.90, 1.0, r);
-    gl_FragColor = vec4(col, alpha);
-    #include <colorspace_fragment>
-  }
-`;
+// shader portalu (wir, pierścień, refrakcja, rozbłysk otwarcia) – w fx.js; tMap/uUseTex/vClip działają jak dawniej
+const portalVert = fx.portalVert;
+const portalFrag = fx.portalFrag;
 
 const ROT180Y = new THREE.Matrix4().makeRotationY(Math.PI);
 
@@ -299,12 +216,7 @@ class Portal {
     this.host = null;
     this.open = 0;
 
-    this.uniforms = {
-      tMap: { value: DUMMY_TEX },
-      uColor: { value: new THREE.Color(COLORS[index]) },
-      uTime: { value: 0 },
-      uUseTex: { value: 0 },
-    };
+    this.uniforms = fx.portalUniforms(COLORS[index], DUMMY_TEX);
     this.material = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
       vertexShader: portalVert,
@@ -319,12 +231,13 @@ class Portal {
     this.disc.frustumCulled = false;
     this.group = new THREE.Group();
     this.group.matrixAutoUpdate = false;
-    this.group.add(this.disc);
+    this.group.add(this.disc, fx.makeHalo(this));
     this.group.visible = false;
     scene.add(this.group);
   }
 
   place(pos, normal, up, host) {
+    if (this.active) fx.portalGone(this);
     this.pos.copy(pos);
     this.normal.copy(normal);
     this.up.copy(up);
@@ -346,9 +259,11 @@ class Portal {
     const s = 1 - Math.pow(1 - e, 3) * Math.cos(e * 5.5) * 0.9; // sprężysty „wskok”
     const k = Math.max(0.001, e >= 1 ? 1 : s * e);
     this.disc.scale.set(PORTAL_HW / 0.88 * k, PORTAL_HH / 0.88 * k, 1);
+    this.uniforms.uOpen.value = e;
   }
 
-  clear() {
+  clear(silent) {
+    if (this.active && !silent) fx.portalGone(this);
     this.active = false;
     this.group.visible = false;
   }
@@ -379,10 +294,10 @@ let viewW = 1, viewH = 1;
 function rtFor(portal, depth) {
   const key = portal.index + ':' + depth;
   let rt = rtCache.get(key);
-  const k = depth === 0 ? 1 : 0.5;
+  const k = depth === 0 ? gfx.quality.rt0 : gfx.quality.rtN;
   const w = Math.max(2, Math.floor(viewW * k)), h = Math.max(2, Math.floor(viewH * k));
   if (!rt) {
-    rt = new THREE.WebGLRenderTarget(w, h, { depthBuffer: true, samples: depth === 0 ? 4 : 0 });
+    rt = new THREE.WebGLRenderTarget(w, h, { depthBuffer: true, samples: depth === 0 ? gfx.quality.msaa : 0 });
     rt.texture.minFilter = THREE.LinearFilter;
     rt.texture.magFilter = THREE.LinearFilter;
     rtCache.set(key, rt);
@@ -465,95 +380,13 @@ function renderView(cam, depth, target) {
 // -------------------------------------------------------------- pistolet ----
 const gunScene = new THREE.Scene();
 const gunCam = new THREE.PerspectiveCamera(55, 1, 0.01, 10);
-gunScene.add(new THREE.AmbientLight(0xffffff, 1.6));
-const gunSun = new THREE.DirectionalLight(0xffffff, 2.0);
-gunSun.position.set(0.4, 0.8, 0.6);
-gunScene.add(gunSun);
 
-const gun = new THREE.Group();
-gun.scale.setScalar(0.65);
-const gunBase = new THREE.Vector3(0.16, -0.15, -0.42);
-gunScene.add(gun);
-const gunWhite = new THREE.MeshLambertMaterial({ color: 0xe9edf1 });
-const gunGrey = new THREE.MeshLambertMaterial({ color: 0x4b525a });
-const gunGlowMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-{
-  const rear = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.058, 0.26, 24), gunWhite);
-  rear.rotation.x = Math.PI / 2;
-  rear.position.set(0, 0, 0.09);
-  gun.add(rear);
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.046, 0.3, 24), gunWhite);
-  barrel.rotation.x = Math.PI / 2;
-  barrel.position.set(0, 0, -0.19);
-  gun.add(barrel);
-  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.035, 24), gunGrey);
-  collar.rotation.x = Math.PI / 2;
-  collar.position.set(0, 0, -0.03);
-  gun.add(collar);
-  const spine = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.22), gunGrey);
-  spine.position.set(0, 0.062, 0.02);
-  gun.add(spine);
-  for (let i = 0; i < 3; i++) {
-    const a = i * (Math.PI * 2 / 3) + Math.PI / 2;
-    const prong = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.012, 0.16), gunGrey);
-    prong.position.set(Math.cos(a) * 0.05, Math.sin(a) * 0.05, -0.34);
-    prong.rotation.z = a - Math.PI / 2;
-    gun.add(prong);
-  }
-  const tip = new THREE.Mesh(new THREE.TorusGeometry(0.034, 0.007, 10, 28), gunGlowMat);
-  tip.position.set(0, 0, -0.35);
-  gun.add(tip);
-  const core = new THREE.Mesh(new THREE.SphereGeometry(0.018, 12, 10), gunGlowMat);
-  core.position.set(0, 0, -0.335);
-  gun.add(core);
-}
-let gunKick = 0;
-const gunColor = new THREE.Color(0xdfe7ee);
-const gunTarget = new THREE.Color(0xdfe7ee);
+// model, animacje i światła pistoletu – w fxmodels.js (przez fx.js)
+const gunRig = fx.createGun(gunScene);
 
 // -------------------------------------------------------------- efekty ----
-const effects = [];
-
-function spawnRing(point, normal, color) {
-  const m = new THREE.Mesh(
-    new THREE.RingGeometry(0.2, 0.28, 32),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1, side: THREE.DoubleSide, depthWrite: false })
-  );
-  m.position.copy(point).addScaledVector(normal, 0.02);
-  m.lookAt(_p.copy(point).add(normal));
-  scene.add(m);
-  effects.push({ mesh: m, t: 0, life: 0.45, kind: 'ring' });
-}
-
-const _up = new THREE.Vector3(0, 1, 0);
-function spawnBeam(from, to, color) {
-  const len = from.distanceTo(to);
-  const m = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.014, 0.014, len, 6, 1, true),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false })
-  );
-  m.position.copy(from).add(to).multiplyScalar(0.5);
-  m.quaternion.setFromUnitVectors(_up, _p.subVectors(to, from).normalize());
-  scene.add(m);
-  effects.push({ mesh: m, t: 0, life: 0.18, kind: 'beam' });
-}
-
-function updateEffects(dt) {
-  for (let i = effects.length - 1; i >= 0; i--) {
-    const e = effects[i];
-    e.t += dt;
-    const k = e.t / e.life;
-    if (k >= 1) {
-      scene.remove(e.mesh);
-      e.mesh.geometry.dispose();
-      e.mesh.material.dispose();
-      effects.splice(i, 1);
-      continue;
-    }
-    e.mesh.material.opacity = (1 - k) * (e.kind === 'beam' ? 0.9 : 1);
-    if (e.kind === 'ring') e.mesh.scale.setScalar(1 + k * 1.6);
-  }
-}
+// pociski, rozbryzgi, cząstki i efekty ekranowe – w fx.js; tu tylko wejście dla fire()
+function spawnRing(point, normal, color) { fx.impact(point, normal, color); }
 
 // ------------------------------------------------------------------ gracz ----
 const player = {
@@ -563,6 +396,7 @@ const player = {
   yaw: 0,
   pitch: 0,
   roll: 0,
+  airUp: false,                   // po wylocie z podłogi, do pierwszego kontaktu z ziemią (patrz teleport)
   camOffset: new THREE.Vector3(), // wygładza „przeskok” kamery po teleportacji
 };
 
@@ -571,7 +405,8 @@ let active = false;       // kursor zablokowany = gra aktywna
 let levelDone = false;
 let levelIndex = 0;
 let levelDef = null;
-let levelTimer = 0;
+let levelTimer = 0;       // czas od ukończenia poziomu (do auto-przejścia)
+let levelTime = 0;        // czas poziomu [s]: nalicza się tylko przy aktywnej grze i nieukończonym poziomie
 
 function overlaps(box, x, y, z) {
   return x - PLAYER_R < box.max.x && x + PLAYER_R > box.min.x &&
@@ -707,6 +542,7 @@ const _fwd = new THREE.Vector3();
 const _upv = new THREE.Vector3();
 
 function physicsStep(dt) {
+  if ((active || game.forceActive) && !levelDone) levelTime += dt;
   // kierunek chodzenia
   let fx = 0, fz = 0;
   if (active || game.forceActive) {
@@ -733,15 +569,24 @@ function physicsStep(dt) {
     if ((keys.Space) && (active || game.forceActive)) {
       player.vel.y = JUMP_V;
       player.onGround = false;
+      audio.play('jump');
     }
   } else if (wishLen > 0) {
+    // sterowanie w powietrzu nie może rozpędzać ponad bieg (strafowanie w stylu Quake'a dawałoby nieograniczony pęd);
+    // prędkość z portali (większa niż bieg) jest zachowana
+    const before = Math.hypot(player.vel.x, player.vel.z);
     accelerate(_wish, speed, 2.5, dt);
+    const after = Math.hypot(player.vel.x, player.vel.z);
+    const cap = Math.max(before, RUN);
+    if (after > cap) { const k = cap / after; player.vel.x *= k; player.vel.z *= k; }
   }
 
+  if (player.onGround) player.airUp = false;
   player.vel.y = Math.max(player.vel.y - GRAVITY * dt, -55);
 
   _eyePrev.copy(player.pos); _eyePrev.y += EYE_H;
   const wasGround = player.onGround;
+  const vyBefore = player.vel.y;
   player.wasGround = wasGround;
   player.onGround = false;
   inFloorHole = false;
@@ -766,14 +611,18 @@ function physicsStep(dt) {
   // teleportacja
   _eye.copy(player.pos); _eye.y += EYE_H;
   tryTeleport(_eyePrev, _eye);
+  gameAudio.move(dt, player, wasGround, vyBefore);
 
   mechanicsStep(dt);
+  if (!game.exitHit && levelDef && exitReached()) game.exitHit = true;
 
   // kwas
   if (player.pos.y < ACID_Y - 0.4) {
     mech.deaths++;
+    gameAudio.acid(player.pos.x, ACID_Y, player.pos.z);
     respawn();
     toast('Kwas! Zaczynasz od nowa');
+    emit('death', { cause: 'acid', deaths: mech.deaths });
   }
 }
 
@@ -799,6 +648,7 @@ const _e = new THREE.Euler();
 function teleport(P) {
   const M = transforms[P.index];
   const O = P.other;
+  fx.teleported(P);
 
   // kamera (oczy) – ciągłość obrazu
   const eye = _eye.copy(player.pos); eye.y += EYE_H;
@@ -806,7 +656,21 @@ function teleport(P) {
   const camWorld = eye.clone();
   // prędkość
   const speed = player.vel.length();
+  gameAudio.teleport(speed);
   player.vel.transformDirection(M).multiplyScalar(speed);
+  // Wylot z podłogi stawia stopy na płaszczyźnie portalu, choć wejście nastąpiło, gdy oczy przekroczyły płaszczyznę
+  // (stopy ~1.6 m niżej) – to jednorazowy „bonus” wysokości. Bez ziemi pomiędzy kolejnymi wylotami z podłogi
+  // (pętla podłoga-podłoga) bonus nie przysługuje, inaczej każdy obieg dodawałby 1.6 m (pompa energii).
+  if (O.normal.y > 0.5) {
+    if (player.airUp) {
+      const vn = player.vel.dot(O.normal);
+      if (vn > 0) {
+        const vn2 = Math.max(0, vn * vn - 2 * GRAVITY * (EYE_H - NEAR));
+        player.vel.addScaledVector(O.normal, Math.sqrt(vn2) - vn);
+      }
+    }
+    player.airUp = true;
+  }
   const out = player.vel.dot(O.normal);
   if (out < PORTAL_MIN_EXIT) player.vel.addScaledVector(O.normal, PORTAL_MIN_EXIT - out);
 
@@ -882,7 +746,7 @@ const cubeMat = (() => {
     for (const [x, y] of [[26, 26], [s - 26, 26], [26, s - 26], [s - 26, s - 26]]) { g.beginPath(); g.arc(x, y, 5, 0, 7); g.fill(); }
   });
   tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-  return new THREE.MeshLambertMaterial({ map: tex });
+  return fx.cubeMaterial(new THREE.MeshLambertMaterial({ map: tex }));
 })();
 
 function makeCube(x, y, z) {
@@ -902,6 +766,7 @@ function makeCube(x, y, z) {
   cubes.push(c);
   syncCubeBox(c);
   dynBoxes.push(c.dyn);
+  fx.cubeBuilt(c, cubes.length - 1);
   return c;
 }
 
@@ -994,27 +859,43 @@ function holdTarget(out) {
 function stepCube(c, dt) {
   if (c.held) {
     const t = holdTarget(_holdT);
+    // cel jest za daleko (np. po śmierci/respawnie gracza) – upuść, zamiast „teleportować” kostkę przez ściany
+    if (c.pos.distanceTo(t) > 8) { dropCube(false, true); syncCubeBox(c); return; }
     const old = _p.copy(c.pos);
     c.onGround = false;
     c.vel.set(0, 0, 0);
-    moveCubeAxis(c, 'x', t.x - c.pos.x);
-    moveCubeAxis(c, 'y', t.y - c.pos.y);
-    moveCubeAxis(c, 'z', t.z - c.pos.z);
+    // przesuwamy małymi krokami (≤ 0.3 m), żeby nie przeskoczyć cienkich ścian, kratek i fizzlerów
+    const dx = t.x - c.pos.x, dy = t.y - c.pos.y, dz = t.z - c.pos.z;
+    const n = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz)) / 0.3));
+    for (let i = 0; i < n; i++) {
+      moveCubeAxis(c, 'x', dx / n);
+      moveCubeAxis(c, 'y', dy / n);
+      moveCubeAxis(c, 'z', dz / n);
+      if (cubeInFizzler(c)) { respawnCube(c); syncCubeBox(c); return; }
+    }
     c.vel.copy(c.pos).sub(old).multiplyScalar(1 / dt);
     c.vel.clampLength(0, 14);
-    if (c.pos.distanceTo(t) > 2.8) dropCube(false);
+    // kostka nie nadąża za celem (zaklinowana za rogiem) – upuść
+    if (c.pos.distanceTo(t) > 2.8) dropCube(false, true);
   } else {
     const prev = _p.copy(c.pos);
     c.vel.y = Math.max(c.vel.y - GRAVITY * dt, -55);
+    const wasOn = c.onGround, vyHit = -c.vel.y;
     c.onGround = false;
     moveCubeAxis(c, 'x', c.vel.x * dt);
     moveCubeAxis(c, 'z', c.vel.z * dt);
     moveCubeAxis(c, 'y', c.vel.y * dt);
     if (c.onGround) { const k = Math.exp(-7 * dt); c.vel.x *= k; c.vel.z *= k; if (Math.hypot(c.vel.x, c.vel.z) < 0.05) { c.vel.x = 0; c.vel.z = 0; } }
+    if (!wasOn && c.onGround && vyHit > 3) gameAudio.cubeHit(c, vyHit);
     cubeTeleport(c, prev);
-    if (c.pos.y < ACID_Y - 0.6) respawnCube(c);
+    if (c.pos.y < ACID_Y - 0.5) { gameAudio.acid(c.pos.x, ACID_Y, c.pos.z, 0.35); respawnCube(c); }
   }
   syncCubeBox(c);
+}
+
+function cubeInFizzler(c) {
+  for (const f of fizzlers) if (cubeHits(f, c.pos.x, c.pos.y, c.pos.z)) { mechEvent('fizzle', f); return true; }
+  return false;
 }
 
 function cubeTeleport(c, prev) {
@@ -1022,8 +903,9 @@ function cubeTeleport(c, prev) {
   for (const P of portals) {
     const dPrev = _cc.subVectors(prev, P.pos).dot(P.normal);
     const dNow = _holdD.subVectors(c.pos, P.pos).dot(P.normal);
-    if (dPrev >= 0 && dNow < 0) {
-      const t = dPrev / (dPrev - dNow);
+    // także kostka „wklejona” w ścianę z portalem (upuszczona zbyt blisko) przechodzi, jeśli jest w otworze
+    if ((dPrev >= 0 && dNow < 0) || (dNow < 0 && dNow > -0.6)) {
+      const t = dPrev >= 0 ? dPrev / (dPrev - dNow) : 1;
       _holdT.lerpVectors(prev, c.pos, t).sub(P.pos);
       const r = _holdT.dot(P.right) / (PORTAL_HW * 1.2), u = _holdT.dot(P.up) / (PORTAL_HH * 1.1);
       if (r * r + u * u < 1) {
@@ -1034,6 +916,7 @@ function cubeTeleport(c, prev) {
         const out = c.vel.dot(P.other.normal);
         if (out < 2.5) c.vel.addScaledVector(P.other.normal, 2.5 - out);
         fxCubeTeleport(c);
+        gameAudio.cubeTeleport(c);
         return;
       }
     }
@@ -1041,17 +924,45 @@ function cubeTeleport(c, prev) {
 }
 
 function respawnCube(c) {
-  if (c.held) dropCube(false);
+  if (c.held) dropCube(false, true);
   c.pos.copy(c.spawn);
   c.vel.set(0, 0, 0);
   c.onGround = false;
   mech.cubeResets++;
   syncCubeBox(c);
   fxCubeReset(c);
+  gameAudio.cubeReset(c);
 }
 
-function fxCubeTeleport() {}
-function fxCubeReset() {}
+function fxCubeTeleport(c) { fx.cubeTeleport(c); }
+function fxCubeReset(c) { fx.cubeReset(c); }
+
+// na co patrzy gracz (podpowiedzi w HUD): ta sama logika co w pickCube (zasięg 3.4 m, bez ściany,
+// bez kostki, na której stoi), ale nic nie podnosi. Zmieniając pickCube, zmień i to.
+const _lkEye = new THREE.Vector3();
+const _lkDir = new THREE.Vector3();
+const _lkHit = new THREE.Vector3();
+const _lkBox = new THREE.Box3();
+const _lkEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+function lookTarget() {
+  if (mech.held || !cubes.length) return null;
+  _lkEye.set(player.pos.x, player.pos.y + EYE_H, player.pos.z);
+  _lkDir.set(0, 0, -1).applyEuler(_lkEuler.set(player.pitch, player.yaw, 0, 'YXZ'));
+  ray.set(_lkEye, _lkDir);
+  ray.far = 3.4;
+  const wall = ray.intersectObjects(solidMeshes(), false)[0];
+  let bestD = wall ? wall.distance : 3.4, found = false;
+  for (const c of cubes) {
+    if (Math.abs(player.pos.y - (c.pos.y + HALF_CUBE)) < 0.12 &&
+        Math.abs(player.pos.x - c.pos.x) < HALF_CUBE + PLAYER_R && Math.abs(player.pos.z - c.pos.z) < HALF_CUBE + PLAYER_R) continue;
+    _lkBox.set(c.dyn.min, c.dyn.max);
+    if (ray.ray.intersectBox(_lkBox, _lkHit)) {
+      const d = _lkHit.distanceTo(_lkEye);
+      if (d < bestD) { found = true; bestD = d; }
+    }
+  }
+  return found ? { type: 'cube', dist: bestD } : null;
+}
 
 // podnoszenie / upuszczanie / rzut
 function pickCube() {
@@ -1082,9 +993,11 @@ function pickCube() {
   return true;
 }
 
-function dropCube(throwIt) {
+function dropCube(throwIt, internal = false) {
   const c = mech.held;
   if (!c) return false;
+  // upuszczenie w powietrzu pozwalałoby „wspinać się” na kostce (skok, podniesienie, puszczenie pod stopami)
+  if (!throwIt && !internal && !player.onGround) return false;
   c.held = false;
   mech.held = null;
   dynBoxes.push(c.dyn);
@@ -1122,6 +1035,7 @@ function addButton(id, x, z, o = {}) {
   levelObjects.push(group);
   const b = { id, x, y, z, r, timer: o.timer || 0, plate, plateMat, pressed: false, hold: 0 };
   buttons.push(b);
+  fx.buttonBuilt(b, group);
   return b;
 }
 
@@ -1130,6 +1044,7 @@ function addDoor(ids, x0, y0, z0, x1, y1, z1, o = {}) {
   const mesh = worldMeshes[worldMeshes.length - 1];
   const d = { ids: Array.isArray(ids) ? ids : [ids], mode: o.mode || 'all', box, mesh, open: 0, height: y1 - y0, invert: !!o.invert };
   doors.push(d);
+  fx.doorBuilt(d);
   return d;
 }
 
@@ -1141,21 +1056,7 @@ function addFizzler(x0, y0, z0, x1, y1, z1) {
   const gz0 = thin === 'z' ? Math.min(z0, (z0 + z1) / 2 - 0.35) : z0, gz1 = thin === 'z' ? Math.max(z1, (z0 + z1) / 2 + 0.35) : z1;
   void lo; void hi;
   const w = Math.max(x1 - x0, z1 - z0), h = y1 - y0;
-  const mat = new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, side: THREE.DoubleSide,
-    uniforms: { uTime: { value: 0 }, uAspect: { value: w / h } },
-    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-    fragmentShader: `varying vec2 vUv; uniform float uTime; uniform float uAspect;
-      void main(){
-        float y = vUv.y * 10.0 - uTime * 2.0;
-        float x = vUv.x * uAspect * 6.0;
-        float a = 0.16 + 0.18 * sin(y * 3.0 + sin(x * 1.7 + uTime * 3.0) * 2.0);
-        a += 0.22 * smoothstep(0.92, 1.0, abs(vUv.x - 0.5) * 2.0 + 0.0);
-        float edge = smoothstep(0.0, 0.08, vUv.y) * smoothstep(1.0, 0.92, vUv.y);
-        gl_FragColor = vec4(0.45, 0.78, 1.0, a * edge);
-        #include <colorspace_fragment>
-      }`,
-  });
+  const mat = fx.fizzlerMaterial(w, h);
   const alongX = (x1 - x0) >= (z1 - z0);
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
   mesh.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
@@ -1164,6 +1065,7 @@ function addFizzler(x0, y0, z0, x1, y1, z1) {
   levelObjects.push(mesh);
   const f = { min: new THREE.Vector3(gx0, y0, gz0), max: new THREE.Vector3(gx1, y1, gz1), mesh, mat };
   fizzlers.push(f);
+  fx.fizzlerBuilt(f, w, h, alongX);
   return f;
 }
 
@@ -1224,20 +1126,19 @@ function mechanicsStep(dt) {
   }
 }
 
-function mechEvent(type, obj) { /* haczyk dla efektów i dźwięku */ void type; void obj; }
+function mechEvent(type, obj) {
+  gameAudio.mech(type, obj);
+  fx.mechEvent(type, obj);
+}
 
+// przyciski, kostki, fizzlery i poświaty drzwi animuje fx.update; tu tylko przesuwanie drzwi
 function mechanicsVisuals(dt) {
-  for (const b of buttons) {
-    b.plate.position.y = b.pressed ? 0.005 : 0.035;
-    b.plateMat.color.set(b.pressed ? 0x37d67a : 0xe5484d);
-  }
   for (const d of doors) {
     const target = d.box.disabled ? 1 : 0;
     d.open += (target - d.open) * Math.min(1, dt * 8);
     d.mesh.position.y = d.open * (d.height + 0.05);
     d.mesh.visible = d.open < 0.985;
   }
-  for (const f of fizzlers) f.mat.uniforms.uTime.value = time;
 }
 
 function resetMechanics() {
@@ -1253,13 +1154,14 @@ function resetMechanics() {
 }
 
 function restartMechanics() {
-  if (mech.held) dropCube(false);
+  if (mech.held) dropCube(false, true);
   for (const c of cubes) { c.pos.copy(c.spawn); c.vel.set(0, 0, 0); c.onGround = false; syncCubeBox(c); c.mesh.position.copy(c.pos); }
   for (const b of buttons) { b.pressed = false; b.hold = 0; }
   for (const d of doors) { d.box.disabled = false; d.open = 0; d.mesh.position.y = 0; d.mesh.visible = true; }
 }
 
 function respawn() {
+  if (mech.held) dropCube(false, true);
   const sp = levelDef ? levelDef.spawn : { x: 0, y: 0, z: 0, yaw: 0 };
   player.pos.set(sp.x, sp.y + 0.02, sp.z);
   player.vel.set(0, 0, 0);
@@ -1269,8 +1171,6 @@ function respawn() {
 }
 
 // ---------------------------------------------------------------- poziomy ----
-const levelNameEl = document.getElementById('levelname');
-const levelGrid = document.getElementById('levels');
 let doneSet = new Set();
 try { doneSet = new Set(JSON.parse(localStorage.getItem('maceaek.done') || '[]')); } catch { /* brak storage */ }
 
@@ -1278,41 +1178,33 @@ function saveDone() {
   try { localStorage.setItem('maceaek.done', JSON.stringify([...doneSet])); } catch { /* ignoruj */ }
 }
 
-function buildLevelGrid() {
-  levelGrid.innerHTML = '';
-  LEVELS.forEach((lv, i) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'lv' + (i === levelIndex ? ' cur' : '') + (doneSet.has(i) ? ' done' : '');
-    b.innerHTML = `<b>${i + 1}</b><span>${lv.name}</span>`;
-    b.addEventListener('click', (e) => { e.stopPropagation(); loadLevel(i); requestLock(); });
-    levelGrid.appendChild(b);
-  });
-}
-
 function loadLevel(i) {
   levelIndex = ((i % LEVELS.length) + LEVELS.length) % LEVELS.length;
   levelDef = LEVELS[levelIndex];
   clearLevel();
-  portals.forEach(p => p.clear());
+  portals.forEach(p => p.clear(true));
   levelDef.build(LevelAPI);
-  // pole „wyjście”
-  const ex = levelDef.exit;
-  const pad = new THREE.Mesh(new THREE.CircleGeometry(1.8, 40), padMat);
-  pad.rotation.x = -Math.PI / 2;
-  pad.position.set(ex.x, ex.y + 0.015, ex.z);
-  addObject(pad);
-  const ring = new THREE.Mesh(new THREE.RingGeometry(2.0, 2.25, 48), padRingMat);
-  ring.rotation.x = -Math.PI / 2;
-  ring.position.set(ex.x, ex.y + 0.02, ex.z);
-  addObject(ring);
+  gfx.bake(bakeContext());
+  fx.makePad(levelDef.exit);
   levelDone = false;
+  game.exitHit = false;
   levelTimer = 0;
+  gameAudio.levelStart();
+  levelTime = 0;
+  mech.deaths = 0;
+  mech.cubeResets = 0;
   respawn();
   updateCrosshair();
-  levelNameEl.innerHTML = `<small>Poziom ${levelIndex + 1} / ${LEVELS.length}</small>${levelDef.name}`;
-  toast(levelDef.hint, 6000);
-  buildLevelGrid();
+  emit('levelstart', { index: levelIndex, name: levelDef.name, hint: levelDef.hint });
+}
+
+// kontekst wypalania światła i siatki świata (gfx.bake)
+function bakeContext() {
+  return {
+    boxes, meshes: worldMeshes, exit: levelDef.exit, render: !game.noRender,
+    add: addObject,
+    remove(o) { scene.remove(o); const i = levelObjects.indexOf(o); if (i >= 0) levelObjects.splice(i, 1); },
+  };
 }
 
 function exitReached() {
@@ -1321,12 +1213,18 @@ function exitReached() {
 }
 
 function restartLevel() {
+  gameAudio.levelStart(portals);
   portals.forEach(p => p.clear());
   restartMechanics();
   respawn();
   updateCrosshair();
   levelDone = false;
+  game.exitHit = false;
   levelTimer = 0;
+  levelTime = 0;
+  mech.deaths = 0;
+  mech.cubeResets = 0;
+  emit('levelstart', { index: levelIndex, name: levelDef.name, hint: levelDef.hint, restart: true });
 }
 
 // ---------------------------------------------------------- strzelanie ----
@@ -1377,15 +1275,14 @@ function traceShot(origin, dir) {
 }
 
 function fire(index) {
-  gunKick = 1;
-  gunTarget.set(COLORS[index]);
+  gunRig.fire(COLORS[index]);
   updateCamera();
   const dir0 = camera.getWorldDirection(new THREE.Vector3());
   const tr = traceShot(camera.position, dir0);
 
   const muzzle = new THREE.Vector3(0.13, -0.12, -0.55).applyMatrix4(camera.matrixWorld);
   tr.segs[0][0] = muzzle;
-  for (const [a, b2] of tr.segs) spawnBeam(a, b2, COLORS[index]);
+  fx.shot(tr.segs, COLORS[index], tr.hit);
   if (!tr.hit) return false;
   const hit = tr.hit;
   const box = hit.object.userData.box;
@@ -1482,32 +1379,24 @@ function resetPortals() {
 }
 
 // ------------------------------------------------------------------- HUD ----
-const crosshair = document.getElementById('crosshair');
 const blobBlue = document.getElementById('blobBlue');
 const blobOrange = document.getElementById('blobOrange');
-const hint = document.getElementById('hint');
-const overlay = document.getElementById('overlay');
-const toastEl = document.getElementById('toast');
-let toastTimer = 0;
 
 function updateCrosshair() {
   blobBlue.classList.toggle('on', portals[0].active);
   blobOrange.classList.toggle('on', portals[1].active);
 }
-function toast(msg, ms = 1800) {
-  toastEl.textContent = msg;
-  toastEl.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastEl.classList.remove('show'), ms);
+// komunikat dla gracza – wyświetla go ui.js; kind (opcjonalnie): 'info' | 'warn' | 'success'
+function toast(msg, ms = 1800, kind) {
+  emit('toast', { msg, ms, kind });
 }
 
 function setActive(v) {
+  if (v === active) return;
+  audio.play(v ? 'resume' : 'pause');
   active = v;
-  overlay.classList.toggle('hidden', v);
-  crosshair.style.display = v ? 'block' : 'none';
-  hint.style.display = v ? 'block' : 'none';
-  levelNameEl.style.display = v ? 'block' : 'none';
   if (!v) for (const k in keys) keys[k] = false;
+  emit(v ? 'resume' : 'pause');
 }
 
 // ----------------------------------------------------------------- input ----
@@ -1517,26 +1406,23 @@ function requestLock() {
     if (r && r.catch) r.catch(() => {});
   } catch { /* ignoruj */ }
 }
-overlay.addEventListener('click', requestLock);
-document.addEventListener('pointerlockchange', () => setActive(document.pointerLockElement === canvas));
-document.addEventListener('pointerlockerror', () => {
-  const err = document.getElementById('err');
-  err.style.display = 'block';
-  err.textContent = 'Nie udało się przechwycić kursora – spróbuj kliknąć jeszcze raz.';
-});
+// pierwszy gest użytkownika odblokowuje dźwięk (audio.init jest bezpieczne przy wielokrotnym wywołaniu)
+document.addEventListener('pointerdown', () => audio.init());
+document.addEventListener('pointerlockchange', () => { audio.init(); setActive(document.pointerLockElement === canvas); });
+document.addEventListener('pointerlockerror', () => emit('lockerror'));
 
 document.addEventListener('mousemove', (e) => {
   if (!active) return;
   if (Math.abs(e.movementX) > 400 || Math.abs(e.movementY) > 400) return;
-  const s = 0.0022;
+  const s = game.settings.sensitivity;
   player.yaw -= e.movementX * s;
-  player.pitch = THREE.MathUtils.clamp(player.pitch - e.movementY * s, -1.5533, 1.5533);
+  player.pitch = THREE.MathUtils.clamp(player.pitch - e.movementY * s * (game.settings.invertY ? -1 : 1), -1.5533, 1.5533);
 });
 
 document.addEventListener('mousedown', (e) => {
   if (!active) return;
-  if (e.button === 0) fire(0);
-  else if (e.button === 2) fire(1);
+  if (e.button === 0) gameAudio.shoot(0, portals, fire);
+  else if (e.button === 2) gameAudio.shoot(1, portals, fire);
   e.preventDefault();
 });
 document.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -1549,9 +1435,14 @@ document.addEventListener('keydown', (e) => {
     toast('Poziom zaczęty od nowa');
   }
   if (e.code === 'KeyE' && !e.repeat && (active || game.forceActive)) {
-    if (mech.held) dropCube(false); else if (!pickCube()) toast('Nie ma czego podnieść', 900);
+    if (mech.held) { const hc = mech.held; if (dropCube(false)) gameAudio.cubeDrop(hc); else toast('Nie możesz upuścić kostki w powietrzu', 900); }
+    else if (!pickCube()) toast('Nie ma czego podnieść', 900);
+    else audio.play('cube-pick');
   }
-  if ((e.code === 'KeyQ' || e.code === 'KeyF') && !e.repeat && (active || game.forceActive)) dropCube(true);
+  if ((e.code === 'KeyQ' || e.code === 'KeyF') && !e.repeat && (active || game.forceActive)) {
+    if (dropCube(true)) audio.play('cube-throw');
+  }
+  // klawisz M (wyciszenie) obsługuje ui.js razem z ustawieniami
   if ((e.code === 'KeyN' || e.code === 'KeyP') && !e.repeat && (active || game.forceActive)) {
     loadLevel(levelIndex + (e.code === 'KeyN' ? 1 : -1));
   }
@@ -1573,10 +1464,26 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
+// ---------------------------------------------------------------- jakość ----
+// preset: pixelRatio, głębokość portali, rozmiary i MSAA render targetów, gęstość wypalania (gfx.QUALITY)
+let qualityName = 'high';
+function setQuality(name, save = true) {
+  if (!gfx.QUALITY[name]) return false;
+  const q = gfx.applyQuality(name);
+  qualityName = name;
+  MAX_DEPTH = q.maxDepth;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatio));
+  for (const rt of rtCache.values()) rt.dispose();
+  rtCache.clear();
+  resize();
+  gfx.rebake();
+  if (save) writeQuality(name);
+  return true;
+}
+
 // ------------------------------------------------------------ pętla gry ----
 let lastT = performance.now();
 let time = 0;
-let bob = 0;
 
 function updateCamera(dt = 0) {
   player.roll *= Math.exp(-7 * dt);
@@ -1585,23 +1492,13 @@ function updateCamera(dt = 0) {
   if (player.camOffset.lengthSq() < 1e-6) player.camOffset.set(0, 0, 0);
   camera.position.set(player.pos.x, player.pos.y + EYE_H, player.pos.z).add(player.camOffset);
   camera.rotation.set(player.pitch, player.yaw, player.roll, 'YXZ');
+  fx.cameraFx(camera, dt);
   camera.updateMatrixWorld(true);
   camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
 }
 
 function updateGun(dt) {
-  gunKick = Math.max(0, gunKick - dt * 6);
-  const sp = Math.hypot(player.vel.x, player.vel.z);
-  bob += dt * (3 + sp * 1.3) * (player.onGround ? 1 : 0.2);
-  const amp = player.onGround ? Math.min(sp / WALK, 1.6) : 0.2;
-  gun.position.set(
-    gunBase.x + Math.sin(bob) * 0.006 * amp,
-    gunBase.y + Math.abs(Math.cos(bob)) * 0.008 * amp - Math.min(Math.max(player.vel.y, -8), 8) * 0.0012,
-    gunBase.z + gunKick * 0.07
-  );
-  gun.rotation.set(gunKick * 0.12, 0, 0);
-  gunColor.lerp(gunTarget, Math.min(1, dt * 10));
-  gunGlowMat.color.copy(gunColor).multiplyScalar(1.0);
+  gunRig.update(dt);
 }
 
 function frame() {
@@ -1619,30 +1516,32 @@ function frame() {
   // pole „wyjście”
   if (levelDone) {
     levelTimer += dt;
-    if (levelTimer > 2.6 && !game.manual) loadLevel(levelIndex + 1);
+    if (levelTimer > 2.6 && !game.manual && game.autoNext) loadLevel(levelIndex + 1);
   } else {
     if (exitReached()) {
       levelDone = true;
       levelTimer = 0;
+      fx.levelComplete(levelDef.exit);
       doneSet.add(levelIndex);
       saveDone();
-      toast(levelIndex === LEVELS.length - 1 ? 'Gratulacje – ukończyłeś wszystkie poziomy! 🎉' : 'Poziom ukończony!', 2600);
+      audio.play('level-complete');
+      emit('levelcomplete', { index: levelIndex, time: levelTime, deaths: mech.deaths, cubeResets: mech.cubeResets });
     }
   }
-  padMat.color.setHSL(0.38, 0.7, 0.5 + 0.1 * Math.sin(time * 3));
-  acidMat.color.setHSL(0.25 + 0.02 * Math.sin(time * 2), 0.75, 0.5 + 0.05 * Math.sin(time * 3.3));
 
   for (const P of portals) {
     P.uniforms.uTime.value = time;
     if (P.active && P.open < 1) {
-      P.open = Math.min(1, P.open + dt * 4.5);
+      P.open = Math.min(1, P.open + dt * 3.2);
       P.updateScale();
     }
   }
-  updateEffects(dt);
+  fx.update(dt);
   mechanicsVisuals(dt);
+  gfx.updateDynamics(cubes, dt);
   updateCamera(dt);
   updateGun(dt);
+  gameAudio.frame(dt, camera, player, portals);
 
   refreshTransforms();
   if (game.noRender) return;
@@ -1662,15 +1561,26 @@ const game = {
   get levelDone() { return levelDone; },
   levelIndex: () => levelIndex,
   exitReached,
+  exitHit: false,    // zatrzask: gracz choć raz stanął na wyjściu (testy; czyszczony przy loadLevel/restartLevel)
   cubes, buttons, doors, fizzlers, mech,
-  pickCube, dropCube,
+  pickCube, dropCube, lookTarget,
+  events, doneSet, requestLock,
+  isActive: () => active || game.forceActive,
+  get levelTime() { return levelTime; },
+  settings: { sensitivity: 0.0022, invertY: false },  // ustawiane przez ui.js (rad na piksel myszy)
+  baseFov: 75,       // podstawowe pole widzenia (ustawia ui.js)
+  autoNext: true,    // false = po ukończeniu poziomu nie ładuj następnego sam (ekran ukończenia w ui.js)
   forceActive: false,
   manual: false,     // true = fizyka tylko przez game.step(dt) (testy)
   noRender: false,   // true = bez rysowania (szybkie testy)
   step: physicsStep,
   rtCache, vcams, transforms,
+  gfx,
+  setQuality,
+  getQuality: () => qualityName,
 };
 window.game = game;
+fx.bind({ player, portals, mech, cubes, buttons, doors, fizzlers, game });
 
 async function boot() {
   // ?lvmod=/levels/lv11.js – wczytaj tylko jeden poziom z podanego modułu (do testów)
@@ -1690,6 +1600,7 @@ async function boot() {
     window.T = kit.install(game);
   }
   updateCrosshair();
+  setQuality(readQuality(), false);
   loadLevel(Number(params.get('level') || 1) - 1);
   frame();
   window.gameReady = true;

@@ -87,7 +87,9 @@ export function install(game) {
         pl.yaw = Math.atan2(-dx, -dz);
         const sp = Math.hypot(pl.vel.x, pl.vel.z);
         game.keys.KeyW = sp < 1.5 || Math.hypot(dx, dz) > 1;
+        const before = pl.pos.clone();
         game.step(DT);
+        if (pl.pos.distanceTo(before) > 2) break;      // wpadłeś w portal – koniec
       }
       T.release();
       return T.st();
@@ -137,7 +139,7 @@ export function install(game) {
     // ---- asercje ----
     assert(cond, msg = 'asercja nie przeszła') { if (!cond) throw new Error(msg); },
     // czy gracz stoi na wyjściu (po solve)
-    assertExit() { for (let i = 0; i < 6; i++) game.step(DT); if (!game.exitReached()) throw new Error('gracz nie stoi na wyjściu: ' + JSON.stringify(T.st())); },
+    assertExit() { for (let i = 0; i < 6; i++) game.step(DT); if (!game.exitHit && !game.exitReached()) throw new Error('gracz nie stoi na wyjściu: ' + JSON.stringify(T.st())); },
   };
   return T;
 }

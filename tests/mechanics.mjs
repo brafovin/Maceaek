@@ -71,6 +71,50 @@ const tests = {
     for (let i = 0; i < 240; i++) g.step(T.DT);
     T.assert(c.pos.x < 0 && Math.abs(c.pos.z - 6) < 1.5, 'kostka powinna wylecieć z zachodniej ściany, jest ' + c.pos.toArray().map(v => +v.toFixed(2)));
   },
+  'nie można upuścić kostki w powietrzu': () => {
+    const T = window.T, g = game;
+    g.restartLevel();
+    T.tp(-6, 0, 4.2); T.face(0, -0.2);
+    T.wait(0.3);
+    T.aim(-6, 0.4, 2); T.pick();
+    T.assert(g.mech.held, 'kostka powinna być w rękach');
+    g.keys.Space = true; g.step(T.DT); g.keys.Space = false;
+    T.run(0.1, {}, null);
+    T.assert(!g.dropCube(false), 'upuszczenie w powietrzu powinno być odrzucone');
+    T.assert(g.mech.held, 'kostka powinna zostać w rękach');
+    T.wait(1.0);
+    T.assert(g.dropCube(false), 'na ziemi upuszczenie powinno działać');
+  },
+  'respawn gracza upuszcza trzymaną kostkę': () => {
+    const T = window.T, g = game;
+    g.restartLevel();
+    T.tp(-6, 0, 4.2); T.face(0, -0.2); T.wait(0.3);
+    T.aim(-6, 0.4, 2); T.pick();
+    g.respawn();
+    T.assert(!g.mech.held, 'po respawnie kostka nie może być trzymana');
+  },
+  'pętla podłoga-podłoga nie pompuje energii': () => {
+    const T = window.T, g = game, pl = g.player;
+    g.restartLevel();
+    // dwa portale podłogowe z tą samą osią „up” (oba strzały patrząc na -z)
+    T.tp(0, 0, 8); T.face(0, -0.9); T.shoot(0, 0, 0, 4, { exact: true });
+    T.tp(0, 0, 8); T.face(0, -0.9); T.shoot(1, 6, 0, 4, { exact: true });
+    T.tp(0, 0, 4); T.wait(0.3);
+    let maxY = 0;
+    for (let i = 0; i < 120 * 14; i++) {
+      // „pilot”: w powietrzu steruj poziomo na najbliższy portal (oszukańczo, żeby pętla działała jak najlepiej)
+      if (!pl.onGround) {
+        const P = (pl.pos.distanceTo(g.portals[0].pos) < pl.pos.distanceTo(g.portals[1].pos)) ? g.portals[0] : g.portals[1];
+        const dx = P.pos.x - pl.pos.x, dz = P.pos.z - pl.pos.z, d = Math.hypot(dx, dz);
+        if (d > 0.05) { pl.vel.x = dx / d * Math.min(8, d * 6); pl.vel.z = dz / d * Math.min(8, d * 6); }
+      } else {
+        T.walkTo(g.portals[0].pos.x, g.portals[0].pos.z, 0.05);
+      }
+      g.step(T.DT);
+      maxY = Math.max(maxY, pl.pos.y);
+    }
+    T.assert(maxY < 4.5, 'pętla podłoga-podłoga nie może pompować wysokości, maks. y = ' + maxY.toFixed(2));
+  },
   'drzwi otwierają się od przycisku i zamykają po zwolnieniu': () => {
     const T = window.T, g = game;
     g.restartLevel();
