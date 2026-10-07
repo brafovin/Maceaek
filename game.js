@@ -1,5 +1,6 @@
 import * as THREE from './vendor/three.module.js';
 import allLevels from './levels/index.js';
+import { audio, gameAudio } from './audio.js';
 
 const LEVELS = [...allLevels];
 const params = new URLSearchParams(location.search);
@@ -733,6 +734,7 @@ function physicsStep(dt) {
     if ((keys.Space) && (active || game.forceActive)) {
       player.vel.y = JUMP_V;
       player.onGround = false;
+      audio.play('jump');
     }
   } else if (wishLen > 0) {
     accelerate(_wish, speed, 2.5, dt);
@@ -742,6 +744,7 @@ function physicsStep(dt) {
 
   _eyePrev.copy(player.pos); _eyePrev.y += EYE_H;
   const wasGround = player.onGround;
+  const vyBefore = player.vel.y;
   player.wasGround = wasGround;
   player.onGround = false;
   inFloorHole = false;
@@ -766,12 +769,14 @@ function physicsStep(dt) {
   // teleportacja
   _eye.copy(player.pos); _eye.y += EYE_H;
   tryTeleport(_eyePrev, _eye);
+  gameAudio.move(dt, player, wasGround, vyBefore);
 
   mechanicsStep(dt);
 
   // kwas
   if (player.pos.y < ACID_Y - 0.4) {
     mech.deaths++;
+    gameAudio.acid(player.pos.x, ACID_Y, player.pos.z);
     respawn();
     toast('Kwas! Zaczynasz od nowa');
   }
@@ -806,6 +811,7 @@ function teleport(P) {
   const camWorld = eye.clone();
   // prędkość
   const speed = player.vel.length();
+  gameAudio.teleport(speed);
   player.vel.transformDirection(M).multiplyScalar(speed);
   const out = player.vel.dot(O.normal);
   if (out < PORTAL_MIN_EXIT) player.vel.addScaledVector(O.normal, PORTAL_MIN_EXIT - out);
@@ -1006,13 +1012,15 @@ function stepCube(c, dt) {
   } else {
     const prev = _p.copy(c.pos);
     c.vel.y = Math.max(c.vel.y - GRAVITY * dt, -55);
+    const wasOn = c.onGround, vyHit = -c.vel.y;
     c.onGround = false;
     moveCubeAxis(c, 'x', c.vel.x * dt);
     moveCubeAxis(c, 'z', c.vel.z * dt);
     moveCubeAxis(c, 'y', c.vel.y * dt);
     if (c.onGround) { const k = Math.exp(-7 * dt); c.vel.x *= k; c.vel.z *= k; if (Math.hypot(c.vel.x, c.vel.z) < 0.05) { c.vel.x = 0; c.vel.z = 0; } }
+    if (!wasOn && c.onGround && vyHit > 3) gameAudio.cubeHit(c, vyHit);
     cubeTeleport(c, prev);
-    if (c.pos.y < ACID_Y - 0.6) respawnCube(c);
+    if (c.pos.y < ACID_Y - 0.6) { gameAudio.acid(c.pos.x, ACID_Y, c.pos.z, 0.35); respawnCube(c); }
   }
   syncCubeBox(c);
 }
@@ -1034,6 +1042,7 @@ function cubeTeleport(c, prev) {
         const out = c.vel.dot(P.other.normal);
         if (out < 2.5) c.vel.addScaledVector(P.other.normal, 2.5 - out);
         fxCubeTeleport(c);
+        gameAudio.cubeTeleport(c);
         return;
       }
     }
@@ -1048,6 +1057,7 @@ function respawnCube(c) {
   mech.cubeResets++;
   syncCubeBox(c);
   fxCubeReset(c);
+  gameAudio.cubeReset(c);
 }
 
 function fxCubeTeleport() {}
@@ -1224,7 +1234,10 @@ function mechanicsStep(dt) {
   }
 }
 
-function mechEvent(type, obj) { /* haczyk dla efektów i dźwięku */ void type; void obj; }
+function mechEvent(type, obj) {
+  gameAudio.mech(type, obj);
+  /* haczyk dla efektów */ void type; void obj;
+}
 
 function mechanicsVisuals(dt) {
   for (const b of buttons) {
@@ -1308,6 +1321,7 @@ function loadLevel(i) {
   addObject(ring);
   levelDone = false;
   levelTimer = 0;
+  gameAudio.levelStart();
   respawn();
   updateCrosshair();
   levelNameEl.innerHTML = `<small>Poziom ${levelIndex + 1} / ${LEVELS.length}</small>${levelDef.name}`;
@@ -1321,6 +1335,7 @@ function exitReached() {
 }
 
 function restartLevel() {
+  gameAudio.levelStart(portals);
   portals.forEach(p => p.clear());
   restartMechanics();
   respawn();
@@ -1502,6 +1517,7 @@ function toast(msg, ms = 1800) {
 }
 
 function setActive(v) {
+  if (v !== active) audio.play(v ? 'resume' : 'pause');
   active = v;
   overlay.classList.toggle('hidden', v);
   crosshair.style.display = v ? 'block' : 'none';
@@ -1517,8 +1533,8 @@ function requestLock() {
     if (r && r.catch) r.catch(() => {});
   } catch { /* ignoruj */ }
 }
-overlay.addEventListener('click', requestLock);
-document.addEventListener('pointerlockchange', () => setActive(document.pointerLockElement === canvas));
+overlay.addEventListener('click', () => { audio.init(); requestLock(); });
+document.addEventListener('pointerlockchange', () => { audio.init(); setActive(document.pointerLockElement === canvas); });
 document.addEventListener('pointerlockerror', () => {
   const err = document.getElementById('err');
   err.style.display = 'block';
@@ -1535,8 +1551,8 @@ document.addEventListener('mousemove', (e) => {
 
 document.addEventListener('mousedown', (e) => {
   if (!active) return;
-  if (e.button === 0) fire(0);
-  else if (e.button === 2) fire(1);
+  if (e.button === 0) gameAudio.shoot(0, portals, fire);
+  else if (e.button === 2) gameAudio.shoot(1, portals, fire);
   e.preventDefault();
 });
 document.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -1549,9 +1565,18 @@ document.addEventListener('keydown', (e) => {
     toast('Poziom zaczęty od nowa');
   }
   if (e.code === 'KeyE' && !e.repeat && (active || game.forceActive)) {
-    if (mech.held) dropCube(false); else if (!pickCube()) toast('Nie ma czego podnieść', 900);
+    if (mech.held) { gameAudio.cubeDrop(mech.held); dropCube(false); }
+    else if (!pickCube()) toast('Nie ma czego podnieść', 900);
+    else audio.play('cube-pick');
   }
-  if ((e.code === 'KeyQ' || e.code === 'KeyF') && !e.repeat && (active || game.forceActive)) dropCube(true);
+  if ((e.code === 'KeyQ' || e.code === 'KeyF') && !e.repeat && (active || game.forceActive)) {
+    if (dropCube(true)) audio.play('cube-throw');
+  }
+  if (e.code === 'KeyM' && !e.repeat) {
+    audio.setMuted(!audio.isMuted());
+    toast(audio.isMuted() ? 'Dźwięk wyłączony' : 'Dźwięk włączony', 1200);
+    if (!audio.isMuted()) audio.play('ui-click');
+  }
   if ((e.code === 'KeyN' || e.code === 'KeyP') && !e.repeat && (active || game.forceActive)) {
     loadLevel(levelIndex + (e.code === 'KeyN' ? 1 : -1));
   }
@@ -1626,6 +1651,7 @@ function frame() {
       levelTimer = 0;
       doneSet.add(levelIndex);
       saveDone();
+      audio.play('level-complete');
       toast(levelIndex === LEVELS.length - 1 ? 'Gratulacje – ukończyłeś wszystkie poziomy! 🎉' : 'Poziom ukończony!', 2600);
     }
   }
@@ -1643,6 +1669,7 @@ function frame() {
   mechanicsVisuals(dt);
   updateCamera(dt);
   updateGun(dt);
+  gameAudio.frame(dt, camera, player, portals);
 
   refreshTransforms();
   if (game.noRender) return;
