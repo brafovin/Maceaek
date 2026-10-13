@@ -5,7 +5,8 @@ od prostych skoków przez portal, przez pęd i kostki, po zegary, fizzlery, odbi
 
 > **Neu: [Kampfzone](kampfzone/)** – ein zweites Spiel im Ordner `kampfzone/`: Battle Royale mit Bus-Absprung, Seen, Insel,
 > Truhen, Waffen, Bauen (Wand/Boden/Rampe), Spitzhacke, schrumpfender Zone, einer Stadt mit 10 Gebäuden, Kirche,
-> Ampeln und Mülltonnen. Anleitung auf Deutsch: [kampfzone/README.md](kampfzone/README.md).
+> Ampeln, Mülltonnen, fahrbaren Autos, Fallschaden und realistischen Skins. Start: `python3 kampfzone/server.py`.
+> Anleitung auf Deutsch: [kampfzone/README.md](kampfzone/README.md).
 
 ## Sterowanie
 

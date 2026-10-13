@@ -274,6 +274,7 @@ export class Hud {
     c.drawImage(this.mapImg, (cx - R + HALF) * 2, (cz - R + HALF) * 2, R * 4, R * 4, 0, 0, W, W);
     const M = (x, z) => [(x - cx) * k + W / 2, (z - cz) * k + W / 2];
     this.drawZone(c, M, k, W);
+    this.drawCars(c, M, 1);
     if (p.state === 'bus') this.drawBus(c, M);
     // Spieler-Pfeil
     c.translate(W / 2, W / 2);
@@ -287,6 +288,7 @@ export class Hud {
       b.drawImage(this.mapImg, 0, 0, BW, BW);
       const BM = (x, z) => [(x + HALF) * bk, (z + HALF) * bk];
       this.drawZone(b, BM, bk, BW);
+      this.drawCars(b, BM, 0.8);
       if (p.state === 'bus') this.drawBus(b, BM);
       const [px, pz] = BM(p.pos.x, p.pos.z);
       b.save(); b.translate(px, pz); b.rotate(-p.yaw);
@@ -312,6 +314,21 @@ export class Hud {
       c.strokeStyle = '#fff'; c.lineWidth = 2; c.setLineDash([6, 4]); c.stroke(); c.setLineDash([]);
     }
     c.restore();
+  }
+
+  // fahrbare Fahrzeuge als kleine Autosymbole
+  drawCars(c, M, s) {
+    for (const v of this.G.vehicles.list) {
+      if (v.dead || v.sink > 0) continue;
+      const [x, z] = M(v.pos.x, v.pos.z);
+      c.save();
+      c.translate(x, z); c.rotate(-v.yaw); c.scale(s, s);
+      c.fillStyle = v.type === 'traktor' ? '#7bd36b' : v.driver ? '#ffb74d' : '#ffffff';
+      c.strokeStyle = '#111'; c.lineWidth = 1.2;
+      c.beginPath(); c.roundRect(-3, -5.5, 6, 11, 2); c.fill(); c.stroke();
+      c.fillStyle = '#1b2833'; c.fillRect(-2, -3, 4, 2.4);
+      c.restore();
+    }
   }
 
   drawBus(c, M) {

@@ -2,7 +2,7 @@
 
 import * as THREE from '../vendor/three.module.js';
 import { moveChar } from './physics.js';
-import { boxAt } from './geo.js';
+import { skinParts } from './skins.js';
 import { WEAPONS, HEALS, RARITY, weaponGeo, pickaxeGeo, healGeo, itemMaterial } from './items.js';
 import { newInventory, current } from './inventory.js';
 import { forward, lerp } from './util.js';
@@ -10,82 +10,101 @@ import { WATER, SWIM_Y } from './terrain.js';
 
 export const SLIDE_T = 0.95;      // Dauer einer Rutschpartie (s)
 
-export const OUTFITS = [
-  { shirt: 0xd9483b, pants: 0x2d3a55, skin: 0xf1c7a1, hair: 0x3b2618, pack: 0x444b55 },
-  { shirt: 0x2f7fd6, pants: 0x30343a, skin: 0xe0ac7e, hair: 0x15110e, pack: 0xc7a14a },
-  { shirt: 0x3fa65a, pants: 0x5a4632, skin: 0xc68b5e, hair: 0x2a1a10, pack: 0x31503a },
-  { shirt: 0xf2b134, pants: 0x3d3d6b, skin: 0xf3d1b5, hair: 0xb5651d, pack: 0x7b3f2a },
-  { shirt: 0x8e44ad, pants: 0x222831, skin: 0x8d5a3b, hair: 0x0e0b09, pack: 0xe6e6e6 },
-  { shirt: 0xe8e8e8, pants: 0x1f5f8b, skin: 0xf0c8a0, hair: 0xe8c66a, pack: 0xd9483b },
-  { shirt: 0x1abc9c, pants: 0x4a4a4a, skin: 0xd9a27a, hair: 0x5b3a1e, pack: 0x2f2f2f },
-  { shirt: 0xff7aa8, pants: 0x2e2e48, skin: 0xf6d5bd, hair: 0x7a2f1f, pack: 0x9b59b6 },
-  { shirt: 0x34495e, pants: 0x6b8e23, skin: 0xb07650, hair: 0x101010, pack: 0x8e6b3a },
-  { shirt: 0xff6b1a, pants: 0x1b1b1b, skin: 0xe8b894, hair: 0x4a2b16, pack: 0x2f7fd6 },
-];
-
-const G_LEG = boxAt(0.2, 0.9, 0.24, 0, -0.45, 0);
-const G_SHOE = boxAt(0.22, 0.12, 0.32, 0, -0.86, -0.03);
-const G_TORSO = boxAt(0.52, 0.62, 0.3, 0, 0, 0);
-const G_HEAD = boxAt(0.32, 0.34, 0.32, 0, 0.17, 0);
-const G_HAIR = boxAt(0.34, 0.1, 0.34, 0, 0.36, 0.01);
-const G_EYE = boxAt(0.06, 0.05, 0.02, 0, 0.2, -0.165);
-const G_ARM = boxAt(0.15, 0.62, 0.15, 0, -0.31, 0);
-const G_HAND = boxAt(0.13, 0.12, 0.13, 0, -0.66, 0);
-const G_PACK = boxAt(0.38, 0.44, 0.16, 0, 0, 0);
+// Figur aus Skin-Teilen: Rumpf, Kopf, Arme mit Ellbogen, Beine mit Knien. Ein eigenes Material je Figur
+// (für das rote Aufblitzen bei Treffern), Farben stecken in den Vertex-Farben.
 const G_GLIDER = (() => {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute([-1.6, 0, 0.5, 0, 0.35, -0.9, 0, 0.1, 0.5, 0, 0.1, 0.5, 0, 0.35, -0.9, 1.6, 0, 0.5], 3));
   g.computeVertexNormals();
   return g;
 })();
+const HIP_Y = 0.93, HIP_X = 0.095, SHO_Y = 1.45, SHO_X = 0.235, KNEE = 0.43, ELBOW = 0.29;
 
-export function makeModel(o) {
-  const mat = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.75 });
-  const M = { shirt: mat(o.shirt), pants: mat(o.pants), skin: mat(o.skin), hair: mat(o.hair), pack: mat(o.pack), dark: mat(0x1d1f22) };
+export function makeModel(skin) {
+  const P = skinParts(skin);
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0 });
   const root = new THREE.Group();
   root.rotation.order = 'YXZ';
   const body = new THREE.Group();
   root.add(body);
-  const mk = (geo, m, parent, x = 0, y = 0, z = 0) => {
+  const mk = (geo, parent, m = mat) => {
     const me = new THREE.Mesh(geo, m);
-    me.position.set(x, y, z);
     me.castShadow = true;
     parent.add(me);
     return me;
   };
   const grp = (parent, x, y, z) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
-  const legL = grp(body, -0.13, 0.92, 0), legR = grp(body, 0.13, 0.92, 0);
-  for (const l of [legL, legR]) { mk(G_LEG, M.pants, l); mk(G_SHOE, M.dark, l); }
-  mk(G_TORSO, M.shirt, body, 0, 1.23, 0);
-  mk(G_PACK, M.pack, body, 0, 1.25, 0.22);
-  const head = grp(body, 0, 1.54, 0);
-  mk(G_HEAD, M.skin, head); mk(G_HAIR, M.hair, head);
-  mk(G_EYE, M.dark, head, -0.07); mk(G_EYE, M.dark, head, 0.07);
-  const armL = grp(body, -0.34, 1.5, 0), armR = grp(body, 0.34, 1.5, 0);
-  for (const a of [armL, armR]) { mk(G_ARM, M.shirt, a); mk(G_HAND, M.skin, a); }
-  const holder = grp(body, 0.24, 1.34, -0.22);
+  mk(P.torso, body);
+  const head = grp(body, 0, 1.58, 0);
+  mk(P.head, head);
+  const limb = (x, y, a, b, joint) => {
+    const g = grp(body, x, y, 0);
+    mk(a, g);
+    const j = grp(g, 0, -joint, 0);
+    mk(b, j);
+    return [g, j];
+  };
+  const [legL, kneeL] = limb(-HIP_X, HIP_Y, P.thigh, P.shin, KNEE);
+  const [legR, kneeR] = limb(HIP_X, HIP_Y, P.thigh, P.shin, KNEE);
+  const [armL, elbowL] = limb(-SHO_X, SHO_Y, P.upper, P.fore, ELBOW);
+  const [armR, elbowR] = limb(SHO_X, SHO_Y, P.upper, P.fore, ELBOW);
+  // Zielachse in Schulterhöhe: Waffe kippt mit dem Blick, die Hände greifen per IK nach
+  const aim = grp(body, 0, SHO_Y, 0);
+  const holder = grp(aim, 0.12, -0.1, -0.2);
   const weapon = new THREE.Mesh(weaponGeo('pistole', 0), itemMaterial());
-  weapon.scale.setScalar(1.25);
+  weapon.scale.setScalar(1.15);
   weapon.castShadow = true;
   holder.add(weapon);
   const pick = new THREE.Mesh(pickaxeGeo(), itemMaterial());
-  pick.position.set(0, -0.66, -0.36);
+  pick.position.set(0, -0.3, -0.36);
   pick.rotation.x = -Math.PI / 2;
   pick.castShadow = true;
-  armR.add(pick);
+  elbowR.add(pick);
   const glider = grp(root, 0, 2.55, 0);
-  const gm = new THREE.Mesh(G_GLIDER, new THREE.MeshStandardMaterial({ color: o.pack, side: THREE.DoubleSide, roughness: 0.6 }));
+  const gm = new THREE.Mesh(G_GLIDER, new THREE.MeshStandardMaterial({ color: skin.packCol || skin.topCol, side: THREE.DoubleSide, roughness: 0.6 }));
   gm.castShadow = true;
   glider.add(gm);
   glider.visible = false;
-  return { root, body, legL, legR, armL, armR, head, holder, weapon, pick, glider, mats: M };
+  return { root, body, legL, legR, kneeL, kneeR, armL, armR, elbowL, elbowR, head, aim, holder, weapon, pick, glider, mats: { body: mat } };
 }
+
+// Zwei-Gelenk-IK: Arm (Schulter) und Ellbogen so drehen, dass die Hand bei (tx, ty, tz) relativ zur Schulter liegt
+const L1 = ELBOW, L2 = 0.3;
+const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3();
+function reach(arm, elbow, tx, ty, tz) {
+  const d = Math.min(L1 + L2 - 0.004, Math.max(0.14, Math.hypot(tx, ty, tz)));
+  const e = Math.PI - Math.acos(Math.max(-1, Math.min(1, (L1 * L1 + L2 * L2 - d * d) / (2 * L1 * L2))));
+  elbow.rotation.set(e, 0, 0);
+  _v1.set(0, -(L1 + L2 * Math.cos(e)), -L2 * Math.sin(e)).normalize();
+  _v2.set(tx, ty, tz).normalize();
+  arm.quaternion.setFromUnitVectors(_v1, _v2);
+}
+// Hand an einen Punkt im Körper-System legen (z. B. Lenkrad des Busfahrers)
+export function reachHand(m, side, x, y, z) {
+  reach(side < 0 ? m.armL : m.armR, side < 0 ? m.elbowL : m.elbowR, x - side * SHO_X, y - SHO_Y, z);
+}
+// Punkt (x, y, z) im Zielachsen-System → Hand-Ziel relativ zur Schulter (side −1 links, +1 rechts)
+const _h = new THREE.Vector3();
+function handTo(m, side, x, y, z) {
+  _h.set(x, y, z).applyEuler(m.aim.rotation).add(m.aim.position);
+  const arm = side < 0 ? m.armL : m.armR, el = side < 0 ? m.elbowL : m.elbowR;
+  reach(arm, el, _h.x - side * SHO_X, _h.y - SHO_Y, _h.z);
+}
+// Griffpunkte je Waffe (im Zielachsen-System): Halterung, rechte Hand, linke Hand
+const HOLD = {
+  pistole: { p: [0.07, -0.08, -0.46], r: [0.07, -0.14, -0.43], l: [0.05, -0.16, -0.42] },
+  mp: { p: [0.11, -0.1, -0.26], r: [0.11, -0.22, -0.33], l: [0.1, -0.2, -0.47] },
+  sturmgewehr: { p: [0.12, -0.1, -0.2], r: [0.12, -0.24, -0.31], l: [0.1, -0.13, -0.5] },
+  schrotflinte: { p: [0.12, -0.1, -0.24], r: [0.12, -0.18, -0.24], l: [0.1, -0.15, -0.6] },
+  scharfschuetze: { p: [0.12, -0.12, -0.26], r: [0.12, -0.24, -0.2], l: [0.1, -0.13, -0.56] },
+  raketenwerfer: { p: [0.2, 0.1, -0.12], r: [0.2, 0.0, -0.08], l: [0.2, 0.0, -0.42] },
+};
 
 const _f = new THREE.Vector3(), _m = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3();
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _UP = new THREE.Vector3(0, 1, 0), _RIGHT = new THREE.Vector3(1, 0, 0);
 
 export class Actor {
-  constructor(G, { name, isPlayer = false, outfit }) {
+  constructor(G, { name, isPlayer = false, skin }) {
     this.G = G;
     this.name = name;
     this.isPlayer = isPlayer;
@@ -107,8 +126,9 @@ export class Actor {
     this.held = null;
     this.crouch = false; this.slideT = 0; this.slideDir = new THREE.Vector3();
     this.swimming = false; this.wading = false; this.stepT = 0;
-    this.seat = -1; this.lastShot = -99;
-    this.model = makeModel(outfit);
+    this.seat = -1; this.lastShot = -99; this.landT = 0;
+    this.skin = skin;
+    this.model = makeModel(skin);
     this.model.root.visible = false;
     G.scene.add(this.model.root);
   }
@@ -117,7 +137,7 @@ export class Actor {
 
   eye(out) { return out.set(this.pos.x, this.pos.y + (this.low ? 1.05 : 1.55), this.pos.z); }
 
-  dispose() { this.G.scene.remove(this.model.root); }
+  dispose() { this.G.scene.remove(this.model.root); this.model.mats.body.dispose(); }
 }
 
 // ---------- Inventar-Aktionen ----------
@@ -425,10 +445,10 @@ function approach(v, tx, tz, acc) {
   else { v.x += (dx / l) * acc; v.z += (dz / l) * acc; }
 }
 
-// Fallschaden: ab ca. 4,7 m Fallhöhe, ab ca. 25 m tödlich
-export const FALL_SAFE = 15;
+// Fallschaden: ab ca. 4 m Fallhöhe (ein Stockwerk), ab ca. 20 m tödlich
+export const FALL_SAFE = 13.5;
 function fallDamage(G, a, v) {
-  const dmg = Math.round((v - FALL_SAFE) * 5.2);
+  const dmg = Math.round((v - FALL_SAFE) * 5.4);
   if (dmg <= 0) return;
   G.sfx.at('fallhurt', a.pos, a.isPlayer ? 1 : 0.6);
   G.fx.debris(_e.set(a.pos.x, a.pos.y + 0.1, a.pos.z), 0x8a7a5a, 8);
@@ -533,6 +553,7 @@ export function stepActor(G, a, wx, wz, jump, dt) {
       if (!wasSwim && a.vel.y < -4) splash(G, a);
     } else if (th < WATER) a.wading = a.pos.y < WATER - 0.2;
   }
+  if (a.landSpeed > 11) a.landT = Math.min(0.35, (a.landSpeed - 8) * 0.03);   // in die Knie gehen
   if (a.landSpeed > FALL_SAFE) fallDamage(G, a, a.landSpeed);
   else if (a.landSpeed > 9 && a.isPlayer) G.sfx.play('land');
   // Schritte (geduckt lautlos)
@@ -555,6 +576,7 @@ export function animate(G, a, dt) {
   if (!a.alive) {
     a.deadT += dt;
     m.root.rotation.x = Math.min(1.45, a.deadT * 4);
+    m.kneeL.rotation.x = m.kneeR.rotation.x = -0.4;
     if (a.deadT > 1.2) m.root.position.y -= (a.deadT - 1.2) * 0.8;
     m.root.visible = a.deadT < 2.2;
     m.root.scale.setScalar(1);
@@ -573,40 +595,55 @@ export function animate(G, a, dt) {
   }
   m.pick.visible = it === 'pickaxe';
   m.holder.visible = !!it && it !== 'pickaxe';
+  m.aim.rotation.set(0, 0, 0);
+  m.head.rotation.set(0, 0, 0);
   const hs = Math.hypot(a.vel.x, a.vel.z);
   const k = 1 - Math.exp(-dt * 14);
   const bodyTo = (y, rx) => { m.body.position.y += (y - m.body.position.y) * k; m.body.rotation.x += (rx - m.body.rotation.x) * k; };
+  // Beine: Oberschenkel (positiv = nach vorn) und Knie (negativ = beugen)
+  const legs = (tl, kl, tr, kr, sl = 0, sr = 0) => {
+    m.legL.rotation.set(tl, 0, sl); m.kneeL.rotation.x = kl;
+    m.legR.rotation.set(tr, 0, sr); m.kneeR.rotation.x = kr;
+  };
+  // Arme: Schulter (Euler) und Ellbogen (positiv = beugen)
+  const arms = (xl, zl, el, xr, zr, er) => {
+    m.armL.rotation.set(xl, 0, zl); m.elbowL.rotation.x = el;
+    m.armR.rotation.set(xr, 0, zr); m.elbowR.rotation.x = er;
+  };
+  const noItem = () => { m.holder.visible = false; m.pick.visible = false; };
   if (a.state === 'car') {
-    // am Steuer
-    m.body.position.y = -0.44; m.body.rotation.x = 0;
-    m.legL.rotation.set(-1.35, 0, 0.06); m.legR.rotation.set(-1.35, 0, -0.06);
-    const st = a.vehicle ? a.vehicle.steer * 0.3 : 0;
-    m.armL.rotation.set(1.15, 0, 0.25 + st); m.armR.rotation.set(1.15, 0, -0.25 + st);
-    m.head.rotation.x = 0;
-    m.holder.visible = false; m.pick.visible = false;
+    // am Steuer: Hände am Lenkrad
+    m.body.position.y = -0.44; m.body.rotation.x = 0.08;
+    legs(1.4, -1.25, 1.4, -1.35, 0.08, -0.08);
+    const st = a.vehicle ? a.vehicle.steer * 0.35 : 0;
+    arms(1.05 + st, 0.18, 0.55, 1.05 - st, -0.18, 0.55);
+    noItem();
     return;
   }
   if (a.state === 'bus') {
-    // sitzen
-    m.body.position.y = -0.44; m.body.rotation.x = 0;
-    m.legL.rotation.set(-1.45, 0, 0.06); m.legR.rotation.set(-1.45, 0, -0.06);
-    m.armL.rotation.set(0.55, 0, 0.12); m.armR.rotation.set(0.55, 0, -0.12);
+    // sitzen, Hände auf den Oberschenkeln
+    m.body.position.y = -0.44; m.body.rotation.x = 0.05;
+    legs(1.45, -1.45, 1.45, -1.45, 0.06, -0.06);
+    arms(0.35, 0.1, 0.9, 0.35, -0.1, 0.9);
     m.head.rotation.x = a.pitch * 0.3;
-    m.holder.visible = false; m.pick.visible = false;
+    noItem();
     return;
   }
   if (a.state === 'fall') {
-    bodyTo(0, -1.15);
-    m.armL.rotation.set(0.2, 0, 1.3); m.armR.rotation.set(0.2, 0, -1.3);
-    m.legL.rotation.set(-0.3, 0, 0.25); m.legR.rotation.set(-0.3, 0, -0.25);
-    m.holder.visible = false; m.pick.visible = false;
+    // Fallschirmspringer-Haltung: Bauch nach unten, Arme und Beine gespreizt
+    bodyTo(0, -1.25);
+    const fl = Math.sin(G.time * 9) * 0.06;
+    arms(0.4, 1.25 + fl, 1.2, 0.4, -1.25 - fl, 1.2);
+    legs(-0.15, -0.9, -0.15, -0.9, 0.3, -0.3);
+    m.head.rotation.x = 0.9;
+    noItem();
     return;
   }
   if (a.state === 'glide') {
     bodyTo(0, 0);
-    m.armL.rotation.set(Math.PI - 0.15, 0, -0.2); m.armR.rotation.set(Math.PI - 0.15, 0, 0.2);
-    m.legL.rotation.set(0.25, 0, 0); m.legR.rotation.set(-0.1, 0, 0);
-    m.holder.visible = false; m.pick.visible = false;
+    arms(Math.PI - 0.2, -0.25, 0.25, Math.PI - 0.2, 0.25, 0.25);
+    legs(0.3, -0.35, -0.05, -0.15);
+    noItem();
     return;
   }
   if (a.swimming) {
@@ -614,47 +651,65 @@ export function animate(G, a, dt) {
     m.root.position.y = WATER - 0.55;
     bodyTo(0.05, -1.3);
     const t = G.time * 5;
-    m.armL.rotation.set(Math.PI + Math.sin(t) * 1.4, 0, 0.1); m.armR.rotation.set(Math.PI - Math.sin(t) * 1.4, 0, -0.1);
-    m.legL.rotation.set(Math.sin(t * 2) * 0.35, 0, 0); m.legR.rotation.set(-Math.sin(t * 2) * 0.35, 0, 0);
+    arms(Math.PI + Math.sin(t) * 1.4, 0.1, 0.25 + Math.max(0, Math.cos(t)) * 0.6, Math.PI - Math.sin(t) * 1.4, -0.1, 0.25 + Math.max(0, -Math.cos(t)) * 0.6);
+    legs(Math.sin(t * 2) * 0.3, -0.25, -Math.sin(t * 2) * 0.3, -0.25);
     m.head.rotation.x = 0.9;
-    m.holder.visible = false; m.pick.visible = false;
+    noItem();
     return;
   }
   a.walk += hs * dt * (a.crouch ? 2.6 : 1.9);
-  const sw = Math.sin(a.walk) * Math.min(1, hs / (a.crouch ? 2.5 : 5)) * 0.75;
+  const amp = Math.min(1, hs / (a.crouch ? 2.5 : 5));
+  const sw = Math.sin(a.walk) * amp * 0.7;
+  // Knie beugt sich, während das Bein nach vorn schwingt
+  const kn = ph => -(0.08 + Math.max(0, Math.cos(ph)) * amp * (hs > 7 ? 1.5 : 1.05));
   if (a.slideT > 0) {
+    // Rutschen: zurückgelehnt, ein Bein gestreckt, eins angewinkelt
     bodyTo(-0.5, 0.5);
-    m.legL.rotation.set(-1.4, 0, 0.1); m.legR.rotation.set(-1.25, 0, -0.1);
+    legs(0.95, -0.2, 0.55, -1.25, 0.1, -0.12);
+  } else if (a.landT > 0) {
+    // harte Landung: kurz in die Knie
+    a.landT -= dt;
+    bodyTo(-0.32, -0.25);
+    legs(1.0, -1.7, 0.85, -1.5);
   } else if (a.crouch) {
-    bodyTo(-0.36, -0.12);
-    m.legL.rotation.set(-0.75 + sw * 0.5, 0, 0); m.legR.rotation.set(-0.75 - sw * 0.5, 0, 0);
+    bodyTo(-0.3, -0.18);
+    legs(0.95 + sw * 0.4, -1.6 + Math.max(0, sw) * 0.4, 0.95 - sw * 0.4, -1.6 + Math.max(0, -sw) * 0.4);
   } else {
-    bodyTo(0, hs > 7 ? -0.12 : 0);
-    if (a.onGround) { m.legL.rotation.set(sw, 0, 0); m.legR.rotation.set(-sw, 0, 0); }
-    else { m.legL.rotation.set(0.6, 0, 0); m.legR.rotation.set(-0.25, 0, 0); }
+    bodyTo(0, hs > 7 ? -0.14 : -0.02);
+    if (a.onGround) legs(sw, kn(a.walk), -sw, kn(a.walk + Math.PI));
+    else legs(0.75, -1.1, -0.15, -0.35);
   }
   m.head.rotation.x = a.pitch * 0.5;
   if (it && it !== 'pickaxe' && it.k === 'w') {
-    const kick = a.shotT * 1.5;
-    m.armR.rotation.set(Math.PI / 2 + a.pitch + kick, 0, 0.05);
-    m.armL.rotation.set(Math.PI / 2 + a.pitch + kick, 0, 0.62);
-    m.holder.rotation.set(a.pitch + kick, 0, 0);
-    m.holder.position.set(0.24, 1.34, -0.22 + a.shotT * 0.6);
-    if (a.reloadT > 0) { m.holder.rotation.x = a.pitch - 0.5; m.armL.rotation.x = 0.6; }
+    // Waffe im Anschlag: Zielachse folgt dem Blick, Hände per IK an Griff und Handschutz
+    const H = HOLD[it.id] || HOLD.sturmgewehr;
+    const kick = a.shotT * 1.2, back = a.shotT * 0.5;
+    m.aim.rotation.x = a.pitch + kick;
+    m.head.rotation.x = a.pitch * 0.25;
+    m.holder.position.set(H.p[0], H.p[1], H.p[2] + back);
+    m.holder.rotation.set(0, 0, 0);
+    handTo(m, 1, H.r[0], H.r[1], H.r[2] + back);
+    if (a.reloadT > 0) {
+      // nachladen: Waffe gekippt, linke Hand am Magazin
+      m.holder.rotation.x = -0.45;
+      handTo(m, -1, H.p[0] - 0.02, H.p[1] - 0.2, H.p[2] - 0.05 + Math.sin(G.time * 10) * 0.04);
+    } else handTo(m, -1, H.l[0], H.l[1], H.l[2] + back);
   } else if (it === 'pickaxe') {
-    m.armL.rotation.set(-sw * 0.8, 0, 0.08);
+    m.armL.rotation.set(-sw * 0.8, 0, 0.08); m.elbowL.rotation.x = 0.25 + Math.max(0, -sw) * 0.4;
     if (a.swingT > 0) {
       const s = 1 - a.swingT / 0.35;
-      const ang = s < 0.35 ? lerp(0.7, 2.5, s / 0.35) : lerp(2.5, 0.1, (s - 0.35) / 0.65);
+      const ang = s < 0.35 ? lerp(0.7, 2.6, s / 0.35) : lerp(2.6, 0.2, (s - 0.35) / 0.65);
       m.armR.rotation.set(ang + a.pitch * 0.6, 0, -0.1);
-    } else m.armR.rotation.set(0.55 + sw * 0.25, 0, -0.08);
+      m.elbowR.rotation.x = s < 0.35 ? 0.9 : 0.2;
+    } else { m.armR.rotation.set(0.35 + sw * 0.25, 0, -0.08); m.elbowR.rotation.x = 0.45; }
   } else if (it) {
-    const bob = a.useT > 0 ? Math.sin(G.time * 12) * 0.15 : 0;
-    m.armR.rotation.set(1.1 + bob, 0, 0.3);
-    m.armL.rotation.set(1.1 - bob, 0, -0.3);
+    // Heilung vor der Brust, beide Hände dran
+    const bob = a.useT > 0 ? Math.sin(G.time * 12) * 0.04 : 0;
     m.holder.rotation.set(0, 0, 0);
-    m.holder.position.set(0.05, 1.2, -0.38);
+    m.holder.position.set(0.04, -0.27 + bob, -0.36);
+    handTo(m, 1, 0.13, -0.29 + bob, -0.34);
+    handTo(m, -1, -0.05, -0.29 - bob, -0.34);
   } else {
-    m.armL.rotation.set(-sw, 0, 0.08); m.armR.rotation.set(sw, 0, -0.08);
+    arms(-sw, 0.08, 0.2 + Math.max(0, -sw) * 0.5, sw, -0.08, 0.2 + Math.max(0, sw) * 0.5);
   }
 }
