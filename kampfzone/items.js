@@ -83,10 +83,16 @@ export function chestLoot(rng) {
   return out;
 }
 
+// Schlechte Waffe für den Boden: nur Gewöhnlich (grau) oder Ungewöhnlich (grün), keine Spezialwaffen
+export function rollFloorWeapon(rng) {
+  const id = weighted(rng, [['pistole', 36], ['mp', 24], ['schrotflinte', 20], ['sturmgewehr', 20]]);
+  return makeWeapon(id, rng() < 0.78 ? 0 : 1);
+}
+
 // Bodenbeute: eine Sache (plus Munition bei Waffen)
 export function floorLoot(rng) {
   const x = rng();
-  if (x < 0.55) { const w = rollWeapon(rng, 0); return [w, ammoFor(w.id)]; }
+  if (x < 0.62) { const w = rollFloorWeapon(rng); return [w, ammoFor(w.id)]; }
   if (x < 0.82) return [rollHeal(rng)];
   return [ammoFor(rng.pick(['pistole', 'sturmgewehr', 'schrotflinte', 'mp', 'scharfschuetze']), 1.5)];
 }

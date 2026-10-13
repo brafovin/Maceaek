@@ -6,6 +6,7 @@ import { current, give, weaponScore, hasAmmoFor } from './inventory.js';
 import { WEAPONS, HEALS } from './items.js';
 import { wrapAngle, forward, HALF } from './util.js';
 import { MAT_ORDER } from './pieces.js';
+import { inWater } from './terrain.js';
 
 export const BOT_NAMES = ['Lukas', 'Mia', 'Finn', 'Emma', 'Leon', 'Hannah', 'Paul', 'Lea', 'Jonas', 'Sophie', 'Ben', 'Marie',
   'Elias', 'Lina', 'Noah', 'Clara', 'Felix', 'Ida', 'Anton', 'Greta', 'Max', 'Frieda', 'Theo', 'Mila', 'Karl', 'Nele', 'Oskar', 'Lotta', 'Emil', 'Romy'];
@@ -45,10 +46,13 @@ export class Brain {
     if (chests.length && rng() < 0.55) {
       const c = rng.pick(chests);
       this.land.set(c.pos.x + rng.range(-4, 4), 0, c.pos.z + rng.range(-4, 4));
-    } else this.land.set(rng.range(-140, 140), 0, rng.range(-140, 140));
+    } else {
+      do this.land.set(rng.range(-140, 140), 0, rng.range(-140, 140));
+      while (inWater(this.land.x, this.land.z));
+    }
     const rel = _t.copy(this.land).sub(bus.start).setY(0);
     const along = rel.dot(bus.dir);
-    this.jumpAt = Math.min(bus.dur - 1, Math.max(1.5, along / bus.speed - 2 - rng() * 3));
+    this.jumpAt = Math.min(bus.dur - 1, Math.max(bus.doors + 0.3 + rng() * 1.5, along / bus.speed - 2 - rng() * 3));
   }
 
   onHurt(src) {
@@ -101,8 +105,9 @@ export class Brain {
       if (t === a || !t.alive || t.state === 'bus' || t.state === 'fall') continue;
       const dx = t.pos.x - a.pos.x, dz = t.pos.z - a.pos.z, dy = t.pos.y - a.pos.y;
       const d = Math.hypot(dx, dz, dy);
-      if (d > view) continue;
-      if (d > 22) {
+      const sneaky = t.crouch && t.slideT <= 0 && Math.hypot(t.vel.x, t.vel.z) < 3.5 && G.time - t.lastShot > 2;
+      if (d > (sneaky ? view * 0.5 : view)) continue;
+      if (d > (sneaky ? 6 : 22)) {
         const ang = Math.abs(wrapAngle(Math.atan2(-dx, -dz) - a.yaw));
         if (ang > 1.9) continue;
       }
@@ -174,7 +179,7 @@ export class Brain {
     const hasHeal = inv.slots.some(s => s && s.k === 'h' && this.healUseful(s));
     const ed = this.enemy ? this.enemy.pos.distanceTo(a.pos) : Infinity;
     let mode;
-    if (this.enemy && (hasGun || ed < 7) && (G.time - this.seenAt < 2.5)) mode = 'fight';
+    if (this.enemy && (hasGun || ed < 3.5) && (G.time - this.seenAt < 2.5)) mode = 'fight';
     else if (outside && a.hp > 25) mode = 'zone';
     else if (hasHeal && (a.hp < 70 || a.shield < 50) && G.time - a.lastHit > 2.5) mode = 'heal';
     else if (outside || nextOut) mode = 'zone';

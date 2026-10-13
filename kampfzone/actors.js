@@ -6,6 +6,9 @@ import { boxAt } from './geo.js';
 import { WEAPONS, HEALS, RARITY, weaponGeo, pickaxeGeo, healGeo, itemMaterial } from './items.js';
 import { newInventory, current } from './inventory.js';
 import { forward, lerp } from './util.js';
+import { WATER, SWIM_Y } from './terrain.js';
+
+export const SLIDE_T = 0.95;      // Dauer einer Rutschpartie (s)
 
 export const OUTFITS = [
   { shirt: 0xd9483b, pants: 0x2d3a55, skin: 0xf1c7a1, hair: 0x3b2618, pack: 0x444b55 },
@@ -36,7 +39,7 @@ const G_GLIDER = (() => {
   return g;
 })();
 
-function makeModel(o) {
+export function makeModel(o) {
   const mat = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.75 });
   const M = { shirt: mat(o.shirt), pants: mat(o.pants), skin: mat(o.skin), hair: mat(o.hair), pack: mat(o.pack), dark: mat(0x1d1f22) };
   const root = new THREE.Group();
@@ -102,12 +105,17 @@ export class Actor {
     this.lastHit = -99; this.lastAttacker = null;
     this.walk = 0; this.deadT = 0;
     this.held = null;
+    this.crouch = false; this.slideT = 0; this.slideDir = new THREE.Vector3();
+    this.swimming = false; this.wading = false; this.stepT = 0;
+    this.seat = -1; this.lastShot = -99;
     this.model = makeModel(outfit);
     this.model.root.visible = false;
     G.scene.add(this.model.root);
   }
 
-  eye(out) { return out.set(this.pos.x, this.pos.y + 1.55, this.pos.z); }
+  get low() { return this.crouch || this.slideT > 0; }
+
+  eye(out) { return out.set(this.pos.x, this.pos.y + (this.low ? 1.05 : 1.55), this.pos.z); }
 
   dispose() { this.G.scene.remove(this.model.root); }
 }
@@ -195,7 +203,7 @@ export function updateTimers(G, a, dt) {
 export function muzzle(a, out) {
   forward(a.yaw, a.pitch, _f);
   const rx = Math.cos(a.yaw), rz = -Math.sin(a.yaw);
-  return out.set(a.pos.x + rx * 0.14 + _f.x * 0.8, a.pos.y + 1.32 + _f.y * 0.8, a.pos.z + rz * 0.14 + _f.z * 0.8);
+  return out.set(a.pos.x + rx * 0.14 + _f.x * 0.8, a.pos.y + (a.low ? 0.9 : 1.32) + _f.y * 0.8, a.pos.z + rz * 0.14 + _f.z * 0.8);
 }
 
 function spreadDir(d, s, out) {
@@ -217,7 +225,8 @@ export function rayActors(G, o, d, maxT, skip) {
     const px = cx - d.x * along, py = cy - d.y * along, pz = cz - d.z * along;
     if (px * px + py * py + pz * pz > 2.2 * 2.2) continue;
     // Kopf
-    const hx = t.pos.x - o.x, hy = t.pos.y + 1.72 - o.y, hz = t.pos.z - o.z;
+    const low = t.low && !t.swimming;
+    const hx = t.pos.x - o.x, hy = t.pos.y + (low ? 1.22 : 1.72) - o.y, hz = t.pos.z - o.z;
     const b = hx * d.x + hy * d.y + hz * d.z;
     const c = hx * hx + hy * hy + hz * hz - 0.25 * 0.25;
     const disc = b * b - c;
@@ -226,7 +235,7 @@ export function rayActors(G, o, d, maxT, skip) {
       if (th > 0 && th < best) { best = th; ba = t; head = true; }
     }
     // Körper
-    const tb = rayBox(o, d, t.pos.x - 0.33, t.pos.y, t.pos.z - 0.33, t.pos.x + 0.33, t.pos.y + 1.52, t.pos.z + 0.33);
+    const tb = rayBox(o, d, t.pos.x - 0.33, t.pos.y + (t.swimming ? 1.0 : 0), t.pos.z - 0.33, t.pos.x + 0.33, t.pos.y + (low ? 1.05 : 1.52), t.pos.z + 0.33);
     if (tb > 0 && tb < best) { best = tb; ba = t; head = false; }
   }
   return ba ? { a: ba, t: best, head } : null;
@@ -255,6 +264,7 @@ function falloff(W, t) {
 // Hauptaktion (linke Maustaste): schießen, hacken oder heilen. o = Schussursprung, d = Richtung (normiert)
 export function attack(G, a, o, d, aiming = false) {
   const inv = a.inv, it = current(inv);
+  if (a.swimming) return false;
   if (it === 'pickaxe') return swing(G, a, o, d);
   if (!it) return false;
   if (it.k === 'h') { startUse(G, a); return false; }
@@ -267,9 +277,11 @@ export function attack(G, a, o, d, aiming = false) {
   }
   it.mag--;
   a.fireCd = 1 / W.rate;
+  a.lastShot = G.time;
   const mul = RARITY[it.r].mul;
   const moving = Math.hypot(a.vel.x, a.vel.z) > 1.2;
   let spread = (aiming ? W.aimSpread : W.spread) + a.bloom + (moving ? 0.01 : 0) + (a.onGround ? 0 : 0.025);
+  if (a.crouch && a.slideT <= 0) spread *= 0.6;
   a.bloom = Math.min(0.045, a.bloom + (W.auto ? 0.0035 : 0.007));
   a.shotT = 0.1;
   muzzle(a, _m);
@@ -299,7 +311,7 @@ export function attack(G, a, o, d, aiming = false) {
         _e.copy(o).addScaledVector(_d, wt);
         const pc = wc.owner;
         if (pc && pc.parts) G.pieces.damage(pc, W.struct * mul, a);
-        G.fx.impact(_e, wn, pc && pc.debris ? pc.debris : 0x8a8a80);
+        G.fx.impact(_e, wn, wc.water ? 'water' : pc && pc.debris ? pc.debris : 0x8a8a80);
       } else _e.copy(o).addScaledVector(_d, W.range);
       G.fx.tracer(_m, _e, pellets > 1);
     }
@@ -412,18 +424,52 @@ function approach(v, tx, tz, acc) {
   else { v.x += (dx / l) * acc; v.z += (dz / l) * acc; }
 }
 
+// Ducken umschalten; beim Sprinten wird daraus eine Rutschpartie
+export function crouchToggle(G, a, sprinting) {
+  if (a.state !== 'ground' || a.swimming || !a.alive) return;
+  const hs = Math.hypot(a.vel.x, a.vel.z);
+  if (!a.crouch && sprinting && a.onGround && hs > 6) {
+    a.slideT = SLIDE_T;
+    a.slideDir.set(a.vel.x / hs, 0, a.vel.z / hs);
+    a.crouch = true;
+    G.sfx.at('slide', a.pos, a.isPlayer ? 1 : 0.5);
+    return;
+  }
+  a.crouch = !a.crouch;
+  if (!a.crouch) a.slideT = 0;
+}
+
+// ins Wasser gefallen/geglitten?
+function hitWater(G, a) {
+  const W = G.world;
+  if (!W.terrain || a.pos.y > SWIM_Y + 0.05 || W.terrain(a.pos.x, a.pos.z) >= SWIM_Y) return false;
+  a.state = 'ground';
+  a.pos.y = SWIM_Y;
+  a.vel.y = 0;
+  a.swimming = true;
+  splash(G, a);
+  return true;
+}
+
+function splash(G, a) {
+  _e.set(a.pos.x, WATER + 0.2, a.pos.z);
+  G.fx.splash(_e);
+  G.sfx.at('splash', _e, a.isPlayer ? 1 : 0.6);
+}
+
 // wx/wz: gewünschte Geschwindigkeit (m/s)
 export function stepActor(G, a, wx, wz, jump, dt) {
   const W = G.world;
   if (!a.alive) return;
-  if (a.state === 'bus') { a.pos.copy(G.bus.pos); a.vel.set(0, 0, 0); return; }
+  if (a.state === 'bus') { G.seatPos(a, a.pos); a.vel.set(0, 0, 0); return; }
   if (a.state === 'fall') {
     approach(a.vel, wx, wz, 22 * dt);
     const term = a.dive ? -44 : -26;
     moveChar(W, a, dt);
     if (a.vel.y < term) a.vel.y = lerp(a.vel.y, term, Math.min(1, dt * 4));
+    if (hitWater(G, a)) return;
     const g = W.groundAt(a.pos.x, a.pos.z, 0.3, a.pos.y + 0.05, a.pos.y + 0.6);
-    if (a.pos.y - g < 40 || a.deploy) { a.state = 'glide'; a.deploy = false; G.sfx.at('glider', a.pos, a.isPlayer ? 1 : 0.3); }
+    if (a.pos.y - Math.max(g, WATER) < 40 || a.deploy) { a.state = 'glide'; a.deploy = false; G.sfx.at('glider', a.pos, a.isPlayer ? 1 : 0.3); }
     if (a.onGround) a.state = 'ground';
     return;
   }
@@ -431,14 +477,60 @@ export function stepActor(G, a, wx, wz, jump, dt) {
     approach(a.vel, wx, wz, 9 * dt);
     a.vel.y = lerp(a.vel.y, -6.5, Math.min(1, dt * 3));
     moveChar(W, a, dt, 0);
+    if (hitWater(G, a)) return;
     if (a.onGround) { a.state = 'ground'; a.vel.y = 0; G.sfx.at('land', a.pos, a.isPlayer ? 1 : 0.3); }
     return;
   }
-  approach(a.vel, wx, wz, (a.onGround ? 70 : 14) * dt);
-  if (jump && a.onGround) { a.vel.y = 8.2; a.onGround = false; if (a.isPlayer) G.sfx.play('jump'); }
+  // Ducken: niedrigere Figur (Aufstehen nur mit Platz über dem Kopf)
+  const wantH = a.low ? 1.25 : 1.8;
+  if (a.h !== wantH) {
+    if (wantH > a.h && !W.free(a.pos.x, a.pos.y, a.pos.z, a.r * 0.9, 1.8)) a.crouch = true;
+    else a.h = wantH;
+  }
+  if (a.slideT > 0) {
+    a.slideT -= dt;
+    const k = Math.max(0, a.slideT / SLIDE_T);
+    const sp = 3.2 + 8.3 * k;
+    wx = a.slideDir.x * sp; wz = a.slideDir.z * sp;
+    if (a.blocked) a.slideT = 0;
+  }
+  if (a.swimming) {
+    const l = Math.hypot(wx, wz);
+    if (l > 3.6) { wx *= 3.6 / l; wz *= 3.6 / l; }
+    jump = false;
+  } else if (a.wading) { wx *= 0.72; wz *= 0.72; }
+  approach(a.vel, wx, wz, (a.onGround || a.swimming ? (a.slideT > 0 ? 30 : 70) : 14) * dt);
+  if (jump && a.onGround) {
+    a.vel.y = 8.2; a.onGround = false;
+    a.crouch = false; a.slideT = 0;
+    if (a.isPlayer) G.sfx.play('jump');
+  }
   moveChar(W, a, dt);
+  // Wasser: schwimmen im Tiefen, waten im Flachen
+  const wasSwim = a.swimming;
+  a.swimming = false; a.wading = false;
+  if (W.terrain && a.pos.y < WATER + 0.05) {
+    const th = W.terrain(a.pos.x, a.pos.z);
+    if (th < SWIM_Y && a.pos.y <= SWIM_Y + 0.02) {
+      a.swimming = true;
+      if (a.pos.y < SWIM_Y) { a.pos.y = SWIM_Y; if (a.vel.y < 0) a.vel.y = 0; }
+      a.onGround = false;
+      a.landSpeed = 0;
+      a.crouch = false; a.slideT = 0;
+      if (!wasSwim && a.vel.y < -4) splash(G, a);
+    } else if (th < WATER) a.wading = a.pos.y < WATER - 0.2;
+  }
   if (a.landSpeed > 19) hurt(G, a, (a.landSpeed - 19) * 6, null, { fall: true, weapon: 'Sturz' });
   else if (a.landSpeed > 9 && a.isPlayer) G.sfx.play('land');
+  // Schritte (geduckt lautlos)
+  const hs = Math.hypot(a.vel.x, a.vel.z);
+  if ((a.onGround || a.swimming) && hs > 1.2 && a.slideT <= 0) {
+    a.stepT -= dt * hs / (a.swimming ? 1.6 : 2.3);
+    if (a.stepT <= 0) {
+      a.stepT = 1;
+      if (!a.crouch) G.sfx.step(a, hs);
+    }
+  }
 }
 
 // ---------- Animation ----------
@@ -446,16 +538,18 @@ export function stepActor(G, a, wx, wz, jump, dt) {
 export function animate(G, a, dt) {
   const m = a.model;
   m.root.position.copy(a.pos);
-  m.root.rotation.y = a.yaw;
+  m.root.rotation.y = a.state === 'bus' ? G.bus.yaw : a.yaw;
   if (!a.alive) {
     a.deadT += dt;
     m.root.rotation.x = Math.min(1.45, a.deadT * 4);
     if (a.deadT > 1.2) m.root.position.y -= (a.deadT - 1.2) * 0.8;
     m.root.visible = a.deadT < 2.2;
+    m.root.scale.setScalar(1);
     return;
   }
-  m.root.visible = a.state !== 'bus' && !(a.isPlayer && G.hidePlayer);
+  m.root.visible = !(a.isPlayer && G.hidePlayer);
   m.root.rotation.x = 0;
+  m.root.scale.setScalar(a.state === 'bus' ? 0.86 : 1);
   m.glider.visible = a.state === 'glide';
   const it = current(a.inv);
   // gehaltener Gegenstand
@@ -468,24 +562,54 @@ export function animate(G, a, dt) {
   m.holder.visible = !!it && it !== 'pickaxe';
   const hs = Math.hypot(a.vel.x, a.vel.z);
   const k = 1 - Math.exp(-dt * 14);
+  const bodyTo = (y, rx) => { m.body.position.y += (y - m.body.position.y) * k; m.body.rotation.x += (rx - m.body.rotation.x) * k; };
+  if (a.state === 'bus') {
+    // sitzen
+    m.body.position.y = -0.44; m.body.rotation.x = 0;
+    m.legL.rotation.set(-1.45, 0, 0.06); m.legR.rotation.set(-1.45, 0, -0.06);
+    m.armL.rotation.set(0.55, 0, 0.12); m.armR.rotation.set(0.55, 0, -0.12);
+    m.head.rotation.x = a.pitch * 0.3;
+    m.holder.visible = false; m.pick.visible = false;
+    return;
+  }
   if (a.state === 'fall') {
-    m.body.rotation.x += (-1.15 - m.body.rotation.x) * k;
+    bodyTo(0, -1.15);
     m.armL.rotation.set(0.2, 0, 1.3); m.armR.rotation.set(0.2, 0, -1.3);
     m.legL.rotation.set(-0.3, 0, 0.25); m.legR.rotation.set(-0.3, 0, -0.25);
     m.holder.visible = false; m.pick.visible = false;
     return;
   }
-  m.body.rotation.x += (0 - m.body.rotation.x) * k;
   if (a.state === 'glide') {
+    bodyTo(0, 0);
     m.armL.rotation.set(Math.PI - 0.15, 0, -0.2); m.armR.rotation.set(Math.PI - 0.15, 0, 0.2);
     m.legL.rotation.set(0.25, 0, 0); m.legR.rotation.set(-0.1, 0, 0);
     m.holder.visible = false; m.pick.visible = false;
     return;
   }
-  a.walk += hs * dt * 1.9;
-  const sw = Math.sin(a.walk) * Math.min(1, hs / 5) * 0.75;
-  if (a.onGround) { m.legL.rotation.set(sw, 0, 0); m.legR.rotation.set(-sw, 0, 0); }
-  else { m.legL.rotation.set(0.6, 0, 0); m.legR.rotation.set(-0.25, 0, 0); }
+  if (a.swimming) {
+    // Kraulen an der Wasseroberfläche
+    m.root.position.y = WATER - 0.55;
+    bodyTo(0.05, -1.3);
+    const t = G.time * 5;
+    m.armL.rotation.set(Math.PI + Math.sin(t) * 1.4, 0, 0.1); m.armR.rotation.set(Math.PI - Math.sin(t) * 1.4, 0, -0.1);
+    m.legL.rotation.set(Math.sin(t * 2) * 0.35, 0, 0); m.legR.rotation.set(-Math.sin(t * 2) * 0.35, 0, 0);
+    m.head.rotation.x = 0.9;
+    m.holder.visible = false; m.pick.visible = false;
+    return;
+  }
+  a.walk += hs * dt * (a.crouch ? 2.6 : 1.9);
+  const sw = Math.sin(a.walk) * Math.min(1, hs / (a.crouch ? 2.5 : 5)) * 0.75;
+  if (a.slideT > 0) {
+    bodyTo(-0.5, 0.5);
+    m.legL.rotation.set(-1.4, 0, 0.1); m.legR.rotation.set(-1.25, 0, -0.1);
+  } else if (a.crouch) {
+    bodyTo(-0.36, -0.12);
+    m.legL.rotation.set(-0.75 + sw * 0.5, 0, 0); m.legR.rotation.set(-0.75 - sw * 0.5, 0, 0);
+  } else {
+    bodyTo(0, hs > 7 ? -0.12 : 0);
+    if (a.onGround) { m.legL.rotation.set(sw, 0, 0); m.legR.rotation.set(-sw, 0, 0); }
+    else { m.legL.rotation.set(0.6, 0, 0); m.legR.rotation.set(-0.25, 0, 0); }
+  }
   m.head.rotation.x = a.pitch * 0.5;
   if (it && it !== 'pickaxe' && it.k === 'w') {
     const kick = a.shotT * 1.5;

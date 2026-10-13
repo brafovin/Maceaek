@@ -3,6 +3,7 @@
 import * as THREE from '../vendor/three.module.js';
 import { merge, boxAt } from './geo.js';
 import { RARITY, itemGeo, itemMaterial, itemRarity, chestLoot } from './items.js';
+import { WATER } from './terrain.js';
 
 const _v = new THREE.Vector3();
 
@@ -135,7 +136,7 @@ export class Loot {
           if (h) { p.vel.x *= -0.3; p.vel.z *= -0.3; }
           else { p.pos.x = nx; p.pos.z = nz; }
         }
-        const g = W.groundAt(p.pos.x, p.pos.z, 0.15, p.pos.y + 0.05, p.pos.y + 0.6);
+        const g = Math.max(W.groundAt(p.pos.x, p.pos.z, 0.15, p.pos.y + 0.05, p.pos.y + 0.6), WATER - 0.25);   // schwimmt auf Wasser
         p.pos.y += p.vel.y * dt;
         if (p.pos.y <= g) {
           p.pos.y = g;

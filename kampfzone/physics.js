@@ -11,6 +11,7 @@ export const STEP = 0.8;      // maximale Stufenhöhe
 const SNAP = 0.55;            // „am Boden kleben“ beim Hinabgehen
 
 export const GROUND = { ground: true };
+export const WATERHIT = { water: true };
 
 export class World {
   constructor() {
@@ -19,6 +20,8 @@ export class World {
     this.tmp = [];
     this.tmp2 = [];
     this.hit = { t: 0, c: null, nx: 0, ny: 0, nz: 0, x: 0, y: 0, z: 0 };
+    this.terrain = null;      // Höhenfunktion (x, z) → y; ohne: flach bei 0
+    this.water = -Infinity;   // Wasserspiegel
   }
 
   clear() { for (const c of this.cells) c.length = 0; }
@@ -78,7 +81,7 @@ export class World {
 
   // höchste tragende Fläche unter dem Fuß (Boxen bis maxBox, Schrägen bis maxSlope)
   groundAt(x, z, r, maxBox, maxSlope) {
-    let g = 0;
+    let g = this.terrain ? this.terrain(x, z) : 0;
     for (const c of this.query(x - r, z - r, x + r, z + r)) {
       if (c.t === 0) {
         if (c.maxy <= maxBox && c.maxy > g && x + r > c.minx && x - r < c.maxx && z + r > c.minz && z - r < c.maxz) g = c.maxy;
@@ -117,8 +120,17 @@ export class World {
     const st = ++this.stamp;
     let best = maxT, bc = null, bnx = 0, bny = 0, bnz = 0;
     if (withGround && dy < -1e-9) {
-      const t = -oy / dy;
-      if (t >= 0 && t < best) { best = t; bc = GROUND; bnx = 0; bny = 1; bnz = 0; }
+      let t = -oy / dy, gc = GROUND;
+      if (this.terrain && t >= 0) {
+        // Seen und Ufer: Wasseroberfläche bzw. Böschung statt der Ebene y = 0
+        const h = this.terrain(ox + dx * t, oz + dz * t);
+        if (h < -0.02) {
+          const y = Math.max(h, this.water);
+          t = (y - oy) / dy;
+          if (h < this.water) gc = WATERHIT;
+        }
+      }
+      if (t >= 0 && t < best) { best = t; bc = gc; bnx = 0; bny = 1; bnz = 0; }
     }
     let gx = Math.floor((ox + OFF) / CS), gz = Math.floor((oz + OFF) / CS);
     const sx = dx > 0 ? 1 : -1, sz = dz > 0 ? 1 : -1;

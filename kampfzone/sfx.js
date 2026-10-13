@@ -146,7 +146,23 @@ export class Sfx {
       case 'win': [523, 659, 784, 1047, 784, 1047].forEach((f, i) => this._tone(o, { t: i * 0.13, dur: 0.3, type: 'triangle', f, vol: 0.3 })); break;
       case 'lose': [392, 330, 262].forEach((f, i) => this._tone(o, { t: i * 0.25, dur: 0.4, type: 'triangle', f, vol: 0.3 })); break;
       case 'click': this._tone(o, { dur: 0.03, type: 'square', f: 1200, vol: 0.1 }); break;
+      case 'step': this._noise(o, { dur: 0.07, type: 'bandpass', f: 380 + Math.random() * 200, q: 1.2, vol: 0.5 }); break;
+      case 'wade': this._noise(o, { dur: 0.22, type: 'bandpass', f: 900 + Math.random() * 400, q: 0.8, vol: 0.35, attack: 0.03 }); break;
+      case 'swim': this._noise(o, { dur: 0.35, type: 'lowpass', f: 700, f2: 300, vol: 0.4, attack: 0.08 }); break;
+      case 'splash': this._noise(o, { dur: 0.6, type: 'bandpass', f: 1400, f2: 400, q: 0.7, vol: 0.9, attack: 0.01 }); this._noise(o, { dur: 0.3, type: 'lowpass', f: 300, vol: 0.5 }); break;
+      case 'slide': this._noise(o, { dur: 0.7, type: 'bandpass', f: 500, f2: 200, q: 0.6, vol: 0.5, attack: 0.03 }); break;
+      case 'edit': this._tone(o, { dur: 0.06, type: 'square', f: 700, vol: 0.12 }); this._tone(o, { t: 0.06, dur: 0.1, type: 'square', f: 1050, vol: 0.12 }); break;
     }
+  }
+
+  // Schritte: Sprinten laut, Gehen leiser, Schwimmen platscht; geduckt wird gar nicht aufgerufen
+  step(a, speed) {
+    if (!this.ctx || this.muted) return;
+    const cam = this.G.camera;
+    if (!cam || a.pos.distanceToSquared(cam.position) > 40 * 40) return;
+    const kind = a.swimming ? 'swim' : a.wading ? 'wade' : 'step';
+    const v = (speed > 7 ? 1 : 0.55) * (a.isPlayer ? 0.35 : 0.9);
+    this.at(kind, a.pos, v);
   }
 
   // Schussgeräusch je Waffe; entfernte Schüsse dumpfer

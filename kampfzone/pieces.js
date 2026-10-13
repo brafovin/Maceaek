@@ -106,6 +106,16 @@ export class Pieces {
     });
   }
 
+  // Kacheln bearbeiteter Bauteile (Wand 3 × 3, Boden 2 × 2)
+  tilePool(kind, mat) {
+    const tex = this.G.tex[BUILD_MATS[mat].tex];
+    return this.pool(`b-${kind}tile-${mat}`, () => ({
+      geo: kind === 'wall' ? boxAt(4 / 3, 4 / 3, T, 0, 0, 0) : boxAt(2, 0.2, 2, 0, 0.1, 0),
+      mat: this._std('b-' + mat, { map: tex, metalness: mat === 'metall' ? 0.35 : 0, roughness: mat === 'metall' ? 0.55 : 0.85 }),
+      cap: 900,
+    }));
+  }
+
   cityWallPool(style, variant) {
     const S = STYLES[style], tx = this.G.tex;
     return this.pool(`c-wall-${style}-${variant}`, () => {
@@ -114,7 +124,7 @@ export class Pieces {
       const ext = this._std(`ext-${style}-${variant}`, { map: extTex });
       const int = this._std(`int-${style}`, { map: tx[S.int] });
       const geoV = variant === 'door' || variant === 'bigdoor' ? variant : 'solid';
-      return { geo: wallGeo(geoV), mat: [edge, edge, edge, edge, ext, int], cap: 360 };
+      return { geo: wallGeo(geoV), mat: [edge, edge, edge, edge, ext, int], cap: 700 };
     });
   }
 
@@ -124,12 +134,12 @@ export class Pieces {
       const edge = this._std('edge-' + style, { color: S.edge });
       const top = roof ? this._std('roof-gravel', { map: tx.roofGravel }) : this._std('floor-' + S.floorTex, { map: tx[S.floorTex] });
       const bottom = this._std('ceiling', { map: tx.ceiling });
-      return { geo: boxAt(4, 0.2, 4, 0, 0.1, 0), mat: [edge, edge, top, bottom, edge, edge], cap: 400 };
+      return { geo: boxAt(4, 0.2, 4, 0, 0.1, 0), mat: [edge, edge, top, bottom, edge, edge], cap: 700 };
     });
   }
 
   stairPool() {
-    return this.pool('c-ramp', () => ({ geo: rampGeo(), mat: this._std('stairs', { map: this.G.tex.stairs }), cap: 80 }));
+    return this.pool('c-ramp', () => ({ geo: rampGeo(), mat: this._std('stairs', { map: this.G.tex.stairs }), cap: 120 }));
   }
 
   reset() {
@@ -324,8 +334,113 @@ export class Pieces {
       pool: this.buildPool(t.kind, mat), built: true, owner: a, debris: M.debris, sound: mat,
     };
     const pc = t.kind === 'wall' ? this.addWall(o) : t.kind === 'floor' ? this.addFloor(o) : this.addRamp(o);
+    pc.meta = { kind: t.kind, mat, i: t.i, j: t.j, k: t.k, axis: t.axis, dir: t.dir };
+    pc.edit = 0;
     this.G.sfx.at('build', pc.center);
     return pc;
+  }
+
+  // ---------- Bearbeiten ----------
+  // Wand: 9 Kacheln (Bit = Reihe·3 + Spalte, Reihe 0 unten), Boden: 4 Kacheln, Rampe: Richtung
+
+  static tileCount(kind) { return kind === 'wall' ? 9 : kind === 'floor' ? 4 : 0; }
+
+  // Ursprung und Drehung eines gebauten Teils
+  frame(pc) {
+    const { kind, i, j, k, axis } = pc.meta;
+    if (kind === 'wall') return { ox: axis === 'x' ? i * GRID + 2 : i * GRID, oy: j * GRID, oz: axis === 'x' ? k * GRID : k * GRID + 2, yaw: axis === 'x' ? 0 : Math.PI / 2 };
+    if (kind === 'floor') return { ox: i * GRID + 2, oy: j * GRID, oz: k * GRID + 2, yaw: 0 };
+    return { ox: i * GRID + 2, oy: j * GRID + 2, oz: k * GRID + 2, yaw: DIR_YAW[pc.meta.dir] };
+  }
+
+  // Bearbeitung übernehmen: Teile und Kollision neu aufbauen
+  applyEdit(pc, edit, dir) {
+    if (pc.dead || !pc.meta) return;
+    const { kind, mat, i, j, k } = pc.meta;
+    const W = this.G.world;
+    for (const p of pc.parts) p.pool.remove(p.idx);
+    for (const c of pc.colliders) W.remove(c);
+    pc.parts = []; pc.colliders = [];
+    pc.edit = edit;
+    if (kind === 'ramp' && dir !== undefined) pc.meta.dir = dir;
+    const f = this.frame(pc);
+    const base = mat4(f.ox, f.oy, f.oz, f.yaw);
+    const add = (pool, m) => { const color = new THREE.Color(1, 1, 1); pc.parts.push({ pool, idx: pool.add(m, color), m: m.clone(), color }); };
+    const box = b => pc.colliders.push(W.box(b[0], b[1], b[2], b[3], b[4], b[5], pc));
+    if (kind === 'wall') {
+      if (!edit) { add(this.buildPool('wall', mat), base); box(rotBox(WALL_BOXES.solid[0], f.yaw, f.ox, f.oy, f.oz)); }
+      else for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+        if (edit & (1 << (r * 3 + c))) continue;
+        const lx = -2 + (c + 0.5) * 4 / 3, ly = (r + 0.5) * 4 / 3;
+        add(this.tilePool('wall', mat), base.clone().multiply(_m.makeTranslation(lx, ly, 0)));
+        box(rotBox([lx - 2 / 3, ly - 2 / 3, -T / 2, lx + 2 / 3, ly + 2 / 3, T / 2], f.yaw, f.ox, f.oy, f.oz));
+      }
+    } else if (kind === 'floor') {
+      if (!edit) { add(this.buildPool('floor', mat), base); box([f.ox - 2, f.oy, f.oz - 2, f.ox + 2, f.oy + 0.2, f.oz + 2]); }
+      else for (let r = 0; r < 2; r++) for (let c = 0; c < 2; c++) {
+        if (edit & (1 << (r * 2 + c))) continue;
+        const x = f.ox - 1 + c * 2, z = f.oz - 1 + r * 2;
+        add(this.tilePool('floor', mat), mat4(x, f.oy, z));
+        box([x - 1, f.oy, z - 1, x + 1, f.oy + 0.2, z + 1]);
+      }
+    } else {
+      const d = pc.meta.dir, axis = d < 2 ? 0 : 2, sgn = d % 2 === 0 ? 1 : -1;
+      add(this.buildPool('ramp', mat), base);
+      pc.colliders.push(W.slope(i * GRID, k * GRID, i * GRID + GRID, k * GRID + GRID, j * GRID, GRID, axis, sgn, pc));
+    }
+    this._tint(pc, 1);
+    this.G.sfx.at('edit', pc.center);
+  }
+
+  // Bearbeitungsraster anzeigen; hover = Kachelindex unter dem Fadenkreuz
+  showEdit(pc, edit, dir, hover, cam) {
+    if (!this.editTiles) {
+      this.editTiles = [];
+      for (let n = 0; n < 9; n++) {
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0x4fc3ff, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }));
+        m.renderOrder = 6;
+        m.visible = false;
+        this.G.scene.add(m);
+        this.editTiles.push(m);
+      }
+    }
+    for (const t of this.editTiles) t.visible = false;
+    const f = this.frame(pc);
+    const kind = pc.meta.kind;
+    const paint = (m, removed, hov) => {
+      m.material.color.setHex(removed ? (hov ? 0x46607a : 0x070b12) : (hov ? 0xd8f4ff : 0x3fb8ff));
+      m.material.opacity = removed ? 0.78 : hov ? 0.7 : 0.5;
+      m.visible = true;
+    };
+    if (kind === 'wall') {
+      const side = pc.meta.axis === 'x' ? Math.sign(cam.z - f.oz) || 1 : Math.sign(cam.x - f.ox) || 1;
+      for (let n = 0; n < 9; n++) {
+        const c = n % 3, r = (n / 3) | 0;
+        const lx = -2 + (c + 0.5) * 4 / 3, ly = (r + 0.5) * 4 / 3;
+        const m = this.editTiles[n];
+        m.scale.set(1.16, 1.16, 1);
+        if (pc.meta.axis === 'x') { m.position.set(f.ox + lx, f.oy + ly, f.oz + side * 0.16); m.rotation.set(0, 0, 0); }
+        else { m.position.set(f.ox + side * 0.16, f.oy + ly, f.oz - lx); m.rotation.set(0, Math.PI / 2, 0); }
+        paint(m, edit & (1 << n), hover === n);
+      }
+    } else if (kind === 'floor') {
+      const above = cam.y > f.oy + 0.1;
+      for (let n = 0; n < 4; n++) {
+        const c = n % 2, r = (n / 2) | 0;
+        const m = this.editTiles[n];
+        m.scale.set(1.8, 1.8, 1);
+        m.position.set(f.ox - 1 + c * 2, f.oy + (above ? 0.27 : -0.07), f.oz - 1 + r * 2);
+        m.rotation.set(-Math.PI / 2, 0, 0);
+        paint(m, edit & (1 << n), hover === n);
+      }
+    } else {
+      this.showGhost({ kind: 'ramp', i: pc.meta.i, j: pc.meta.j, k: pc.meta.k, dir }, true);
+      this.ghosts.ramp.material.color.setHex(0xffd23f);
+    }
+  }
+
+  hideEdit() {
+    if (this.editTiles) for (const t of this.editTiles) t.visible = false;
   }
 
   // ---------- Vorschau (Geist) ----------

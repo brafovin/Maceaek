@@ -10,12 +10,14 @@ import { Sfx } from './sfx.js';
 import { Zone } from './zone.js';
 import { Hud } from './hud.js';
 import { buildMap, updateTrafficLights } from './map.js';
-import { Actor, OUTFITS, attack, select, startReload, stepActor, animate, updateTimers, rayActors } from './actors.js';
+import { Actor, OUTFITS, attack, select, startReload, stepActor, animate, updateTimers, rayActors, crouchToggle } from './actors.js';
+import { WATER, updateWater } from './terrain.js';
 import { Brain, BOT_NAMES } from './bots.js';
 import { current, give } from './inventory.js';
 import { WEAPONS, itemName, makeWeapon } from './items.js';
 import { makeRng, forward, clamp, fmtTime, HALF } from './util.js';
 import { merge } from './geo.js';
+import { makeBus, SEATS } from './bus.js';
 
 const params = new URLSearchParams(location.search);
 const TEST = params.has('test');
@@ -36,6 +38,7 @@ const G = {
   buildMode: false, buildKind: 'wall', buildMat: 'holz', lastBuild: 0,
   camYaw: 0, camPitch: 0, camY: 0, aiming: false, scoped: false, hidePlayer: false,
   interact: null, bigMap: false, fireQueued: false, stats: { dmg: 0 },
+  editing: null, editHint: null,
 };
 window.KZ = G;
 
@@ -112,28 +115,9 @@ const clouds = new THREE.InstancedMesh(cloudGeo, new THREE.MeshStandardMaterial(
   scene.add(clouds);
 }
 
-// Battle-Bus mit Ballon
-const busMesh = (() => {
-  const g = new THREE.Group();
-  const M = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.2 });
-  const add = (geo, m, x = 0, y = 0, z = 0) => { const me = new THREE.Mesh(geo, m); me.position.set(x, y, z); me.castShadow = true; g.add(me); return me; };
-  add(new THREE.BoxGeometry(3.2, 3, 11), M(0x2f7fd6), 0, 0, 0);
-  add(new THREE.BoxGeometry(3.25, 1.1, 9), M(0x1d2a38), 0, 0.5, 0.6);
-  add(new THREE.BoxGeometry(3.0, 1.2, 0.1), M(0x1d2a38), 0, 0.5, -5.52);
-  add(new THREE.BoxGeometry(3.3, 0.3, 11.1), M(0xf2f2f2), 0, -0.6, 0);
-  for (const [x, z] of [[-1.6, -3.5], [1.6, -3.5], [-1.6, 3.5], [1.6, 3.5]]) add(new THREE.CylinderGeometry(0.7, 0.7, 0.4, 14).rotateZ(Math.PI / 2), M(0x151515), x, -1.5, z);
-  const balloon = add(new THREE.SphereGeometry(4.2, 20, 14), M(0x7cc4ff), 0, 9.5, 0);
-  balloon.scale.set(1, 1.15, 1.3);
-  const stripe = add(new THREE.SphereGeometry(4.25, 20, 14, 0, Math.PI * 2, Math.PI * 0.42, Math.PI * 0.16), M(0xffd23f), 0, 9.5, 0);
-  stripe.scale.copy(balloon.scale);
-  for (const [x, z] of [[-1.4, -4], [1.4, -4], [-1.4, 4], [1.4, 4]]) {
-    const r = add(new THREE.CylinderGeometry(0.04, 0.04, 5.2), M(0xdddddd), x * 0.6, 4.0, z * 0.6);
-    r.rotation.set(z > 0 ? -0.35 : 0.35, 0, x > 0 ? 0.15 : -0.15);
-  }
-  g.visible = false;
-  scene.add(g);
-  return g;
-})();
+// Kampfbus (realistischer Linienbus am Heißluftballon)
+const BUS = makeBus(scene);
+const busMesh = BUS.group;
 
 // ---------- Module ----------
 
@@ -148,7 +132,15 @@ G.sfx = new Sfx(G);
 G.zone = new Zone(G);
 G.hud = new Hud(G);
 G.sfx.setVolume(G.settings.vol);
-G.bus = { start: new THREE.Vector3(), dir: new THREE.Vector3(1, 0, 0), speed: 24, dur: 16, t: 0, pos: new THREE.Vector3(), mesh: busMesh };
+G.bus = { start: new THREE.Vector3(), dir: new THREE.Vector3(1, 0, 0), speed: 24, dur: 16, t: 0, yaw: 0, doors: 3, pos: new THREE.Vector3(), mesh: busMesh };
+G.busView = 'innen';
+
+// Sitzplatz einer Figur im Bus (Weltkoordinaten der Füße)
+G.seatPos = (a, out, dy = 0.6, kx = 1) => {
+  const [x, z] = SEATS[Math.max(0, a.seat) % SEATS.length];
+  busMesh.updateMatrixWorld();
+  return out.set(x * kx, dy, z).applyMatrix4(busMesh.matrixWorld);
+};
 
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
@@ -198,15 +190,21 @@ function planBus(rng) {
   B.dur = 390 / B.speed;
   B.t = 0;
   B.pos.copy(B.start);
+  B.yaw = Math.atan2(-B.dir.x, -B.dir.z);
   busMesh.visible = true;
-  busMesh.rotation.y = Math.atan2(-B.dir.x, -B.dir.z);
+  busMesh.position.copy(B.pos);
+  busMesh.rotation.y = B.yaw;
 }
 
 G.eject = a => {
   if (a.state !== 'bus') return;
+  if (G.bus.t < G.bus.doors) { if (a === G.player) G.hud.notice('Die Türen sind noch zu …', 'warn', 1.2); return; }
   a.state = 'fall';
-  a.pos.copy(G.bus.pos).y -= 3;
+  // durch die Mitteltür nach draußen
+  G.seatPos(a, a.pos);
+  a.pos.addScaledVector(new THREE.Vector3(-G.bus.dir.z, 0, G.bus.dir.x), 2.2).y -= 1.2;
   a.vel.set(G.bus.dir.x * 8, -3, G.bus.dir.z * 8);
+  a.yaw = G.bus.yaw;
   if (a === G.player) G.sfx.play('glider', 0.5);
 };
 
@@ -231,11 +229,15 @@ function newGame() {
     G.bots.push(b);
   }
   planBus(rng);
-  for (const a of G.actors) { a.state = 'bus'; a.pos.copy(G.bus.pos); }
+  // Sitzplätze verteilen; der Spieler bekommt einen Fensterplatz
+  const seats = SEATS.map((_, i) => i).sort(() => rng() - 0.5);
+  const win = seats.indexOf(16);        // Fensterplatz links in der Mitte (freie Sicht)
+  [seats[0], seats[win]] = [seats[win], seats[0]];
+  G.actors.forEach((a, i) => { a.state = 'bus'; a.seat = seats[i % seats.length]; G.seatPos(a, a.pos); a.yaw = G.bus.yaw; });
   for (const b of G.bots) b.brain.planDrop(G.bus, rng);
   G.zone.start(rng);
-  player.yaw = Math.atan2(-G.bus.dir.x, -G.bus.dir.z) + 0.6;
-  player.pitch = -0.25;
+  player.yaw = G.bus.yaw + 1.1;   // aus dem Fenster schauen
+  player.pitch = -0.15;
   G.camY = player.pos.y;
   if (params.has('skipbus')) {
     player.state = 'ground';
@@ -276,8 +278,85 @@ function cycleMat(dir = 1) {
 function selectSlot(i) {
   const p = G.player;
   if (!p || !p.alive) return;
+  finishEdit(false);
   G.buildMode = false;
   select(G, p, i);
+}
+
+// ---------- Bearbeiten eigener Bauteile (G) ----------
+
+function findEditTarget(p) {
+  forward(G.camYaw, G.camPitch, _F);
+  const c = camera.position;
+  const h = G.world.raycast(c.x, c.y, c.z, _F.x, _F.y, _F.z, 16, null, false);
+  if (!h || !h.c.owner) return null;
+  const pc = h.c.owner;
+  if (!pc.meta || pc.owner !== p || pc.dead || pc.center.distanceTo(p.pos) > 7.5) return null;
+  return pc;
+}
+
+function toggleEdit() {
+  const p = G.player;
+  if (G.editing) { finishEdit(true); return; }
+  if (!p.alive || p.state !== 'ground' || p.swimming) return;
+  const pc = findEditTarget(p);
+  if (!pc) { G.hud.notice('Schau auf ein eigenes Bauteil in der Nähe, um es zu bearbeiten', 'warn', 1.6); return; }
+  G.editing = { pc, edit: pc.edit, dir: pc.meta.dir, hover: -1, paint: null };
+  G.buildMode = false;
+  G.pieces.hideGhost();
+  G.sfx.play('click');
+}
+
+function finishEdit(apply) {
+  const e = G.editing;
+  if (!e) return;
+  G.editing = null;
+  G.pieces.hideEdit();
+  G.pieces.hideGhost();
+  if (apply && !e.pc.dead && (e.edit !== e.pc.edit || e.dir !== e.pc.meta.dir)) G.pieces.applyEdit(e.pc, e.edit, e.dir);
+}
+
+// Kachel unter dem Fadenkreuz
+function editHover(e) {
+  const pc = e.pc, f = G.pieces.frame(pc), cam = camera.position;
+  forward(G.camYaw, G.camPitch, _F);
+  if (pc.meta.kind === 'wall') {
+    let t, lx;
+    if (pc.meta.axis === 'x') { if (Math.abs(_F.z) < 1e-4) return -1; t = (f.oz - cam.z) / _F.z; lx = cam.x + _F.x * t - f.ox; }
+    else { if (Math.abs(_F.x) < 1e-4) return -1; t = (f.ox - cam.x) / _F.x; lx = f.oz - (cam.z + _F.z * t); }
+    if (t <= 0) return -1;
+    const ly = cam.y + _F.y * t - f.oy;
+    const c = Math.floor((lx + 2) / (4 / 3)), r = Math.floor(ly / (4 / 3));
+    return c >= 0 && c < 3 && r >= 0 && r < 3 ? r * 3 + c : -1;
+  }
+  if (pc.meta.kind === 'floor') {
+    if (Math.abs(_F.y) < 1e-4) return -1;
+    const t = (f.oy + 0.1 - cam.y) / _F.y;
+    if (t <= 0) return -1;
+    const c = Math.floor((cam.x + _F.x * t - f.ox + 2) / 2), r = Math.floor((cam.z + _F.z * t - f.oz + 2) / 2);
+    return c >= 0 && c < 2 && r >= 0 && r < 2 ? r * 2 + c : -1;
+  }
+  return 0;
+}
+
+const RAMP_TURN = [2, 3, 1, 0];   // +x → +z → −x → −z → +x
+function updateEdit() {
+  const e = G.editing, p = G.player;
+  if (e.pc.dead || !p.alive || p.state !== 'ground' || p.swimming || e.pc.center.distanceTo(p.pos) > 9) { finishEdit(false); return; }
+  e.hover = editHover(e);
+  const n = Pieces.tileCount(e.pc.meta.kind);
+  if (G.mouse.l && e.hover >= 0) {
+    if (n === 0) { if (G.fireQueued) { e.dir = RAMP_TURN[e.dir]; G.sfx.play('click'); } }
+    else {
+      const bit = 1 << e.hover, full = (1 << n) - 1;
+      if (e.paint === null) e.paint = !(e.edit & bit);          // true = Kachel entfernen
+      const next = e.paint ? e.edit | bit : e.edit & ~bit;
+      if (next !== e.edit && next !== full) { e.edit = next; G.sfx.play('click', 0.6); }
+    }
+  }
+  if (!G.mouse.l) e.paint = null;
+  G.fireQueued = false;
+  G.pieces.showEdit(e.pc, e.edit, e.dir, e.hover, camera.position);
 }
 
 window.addEventListener('keydown', e => {
@@ -288,17 +367,22 @@ window.addEventListener('keydown', e => {
     const m = /^Digit([1-7])$/.exec(e.code);
     if (m) selectSlot(Number(m[1]) - 1);
     switch (e.code) {
-      case 'KeyQ': setBuild('wall'); break;
-      case 'KeyF': setBuild('floor'); break;
-      case 'KeyC': setBuild('ramp'); break;
-      case 'KeyB': if (G.buildMode) G.buildMode = false; else setBuild(G.buildKind); break;
-      case 'KeyG': cycleMat(); break;
-      case 'KeyR': if (!G.buildMode) startReload(G, p); break;
+      case 'KeyQ': finishEdit(false); setBuild('wall'); break;
+      case 'KeyF': finishEdit(false); setBuild('floor'); break;
+      case 'KeyC': finishEdit(false); setBuild('ramp'); break;
+      case 'KeyB': finishEdit(false); if (G.buildMode) G.buildMode = false; else setBuild(G.buildKind); break;
+      case 'KeyG': toggleEdit(); break;
+      case 'KeyR': if (G.buildMode) cycleMat(); else startReload(G, p); break;
+      case 'KeyX': if (!G.editing) crouchToggle(G, p, (G.keys.ShiftLeft || G.keys.ShiftRight) && (G.keys.KeyW || G.keys.KeyA || G.keys.KeyS || G.keys.KeyD)); break;
+      case 'KeyV': if (p.state === 'bus') G.busView = G.busView === 'innen' ? 'außen' : 'innen'; break;
       case 'KeyE': interact(); break;
       case 'KeyM': G.bigMap = !G.bigMap; $('bigmapWrap').hidden = !G.bigMap; break;
       case 'Space':
         if (p.state === 'bus') G.eject(p);
         else if (p.state === 'fall') p.deploy = true;
+        break;
+      case 'ShiftLeft': case 'ShiftRight':
+        if (p.crouch && p.slideT <= 0) p.crouch = false;   // Sprinten beendet das Schleichen
         break;
     }
   }
@@ -313,7 +397,11 @@ canvas.addEventListener('mousedown', e => {
   if (G.state !== 'play') return;
   if (!locked() && !TEST) { requestLock(); return; }
   if (e.button === 0) { G.mouse.l = true; G.fireQueued = true; G.fireQueuedAt = G.time; }
-  if (e.button === 2) { if (G.buildMode) cycleMat(); else G.mouse.r = true; }
+  if (e.button === 2) {
+    if (G.editing) { G.editing.edit = 0; G.editing.dir = G.editing.pc.meta.dir; G.sfx.play('click'); }
+    else if (G.buildMode) cycleMat();
+    else G.mouse.r = true;
+  }
 });
 window.addEventListener('mouseup', e => {
   if (e.button === 0) G.mouse.l = false;
@@ -398,15 +486,19 @@ function controlPlayer(dt) {
   if (p.state === 'fall') speed = 17;
   else if (p.state === 'glide') speed = 13;
   else {
-    speed = K.ShiftLeft || K.ShiftRight ? 7.8 : 5.8;
-    if (G.aiming) speed = 3.8;
-    if (p.useT > 0) speed = 2.6;
+    const sprint = (K.ShiftLeft || K.ShiftRight) && !p.crouch;
+    speed = sprint ? 7.8 : p.crouch ? 2.8 : 5.8;
+    if (G.aiming) speed = p.crouch ? 2.2 : 3.8;
+    if (p.useT > 0) speed = Math.min(speed, 2.6);
   }
   p.dive = p.state === 'fall' && p.pitch < -0.6;
   stepActor(G, p, vx * speed, vz * speed, !!K.Space && p.state === 'ground', dt);
 
-  // Bauen oder Kämpfen
-  if (G.buildMode && p.state === 'ground') {
+  // Bearbeiten, Bauen oder Kämpfen
+  if (p.swimming) { G.buildMode = false; finishEdit(false); }
+  G.editHint = !G.editing && p.state === 'ground' && !p.swimming ? findEditTarget(p) : null;
+  if (G.editing) updateEdit();
+  else if (G.buildMode && p.state === 'ground') {
     const t = G.pieces.target(p, G.buildKind, G.camYaw, G.camPitch);
     const ok = G.pieces.canBuild(p, t, G.buildMat);
     G.pieces.showGhost(t, ok);
@@ -460,7 +552,7 @@ function updateCamera(dt) {
   G.aiming = !!(G.mouse.r && W && !G.buildMode && p.alive && p.state === 'ground');
   G.scoped = G.aiming && !!W.scope;
   const sprint = (G.keys.ShiftLeft || G.keys.ShiftRight) && p.state === 'ground' && !G.aiming;
-  const fov = G.aiming ? 75 / W.zoom : sprint ? 80 : 75;
+  const fov = G.aiming ? 75 / W.zoom : p.slideT > 0 ? 84 : sprint && !p.crouch ? 80 : 75;
   if (Math.abs(camera.fov - fov) > 0.05) {
     camera.fov += (fov - camera.fov) * Math.min(1, dt * 14);
     camera.updateProjectionMatrix();
@@ -479,18 +571,27 @@ function updateCamera(dt) {
   const yaw = p.yaw, pitch = p.pitch;
   forward(yaw, pitch, _F);
   if (p.state === 'bus') {
-    const b = G.bus.pos;
-    camera.position.set(b.x - _F.x * 30, b.y - _F.y * 30 + 6, b.z - _F.z * 30);
+    if (G.busView === 'innen') {
+      // vom Sitzplatz aus: Mitspieler, Fahrer und die Landschaft unter dem Bus
+      G.seatPos(p, camera.position, 1.78, 0.7);
+      G.hidePlayer = true;
+    } else {
+      const b = G.bus.pos;
+      camera.position.set(b.x - _F.x * 30, b.y + 5 - _F.y * 30 + 2, b.z - _F.z * 30);
+      G.hidePlayer = false;
+    }
     camera.rotation.set(pitch, yaw, 0);
     G.camYaw = yaw; G.camPitch = pitch;
     return;
   }
   const air = p.state === 'fall' || p.state === 'glide';
   const back = G.aiming ? 1.7 : air ? 6.5 : 3.6, side = air ? 0 : G.aiming ? 0.62 : 0.8, up = air ? 1.4 : 0.35;
-  if (Math.abs(G.camY - p.pos.y) > 2.5) G.camY = p.pos.y;
-  else G.camY += (p.pos.y - G.camY) * Math.min(1, dt * 16);
+  const footY = p.swimming ? WATER - 0.6 : p.pos.y;
+  if (Math.abs(G.camY - footY) > 2.5) G.camY = footY;
+  else G.camY += (footY - G.camY) * Math.min(1, dt * 16);
+  G.camLow = (G.camLow || 0) + ((p.low ? 0.5 : 0) - (G.camLow || 0)) * Math.min(1, dt * 10);
   const rx = Math.cos(yaw), rz = -Math.sin(yaw);
-  _H.set(p.pos.x, G.camY + 1.6, p.pos.z);
+  _H.set(p.pos.x, G.camY + 1.6 - G.camLow, p.pos.z);
   _O.set(_H.x + rx * side - _F.x * back, _H.y + up - _F.y * back, _H.z + rz * side - _F.z * back);
   _D.subVectors(_O, _H);
   const len = _D.length();
@@ -557,7 +658,11 @@ function update(dt) {
     B.pos.copy(B.start).addScaledVector(B.dir, B.speed * B.t);
     busMesh.position.copy(B.pos);
     busMesh.position.y += Math.sin(B.t * 1.3) * 0.4;
+    busMesh.rotation.z = Math.sin(B.t * 0.9) * 0.012;
+    for (const w of BUS.wheels) w.rotation.x -= dt * 3;
+    BUS.flame.scale.set(1, 0.8 + Math.random() * 0.5, 1);
     if (B.t >= B.dur) for (const a of G.actors) if (a.state === 'bus') G.eject(a);
+    for (const a of G.actors) if (a.state === 'bus') { G.seatPos(a, a.pos); if (!a.isPlayer) a.yaw = B.yaw; }
     if (B.t > B.dur + 6) busMesh.visible = false;
   }
   if (G.state === 'play') controlPlayer(dt);
@@ -572,6 +677,9 @@ function update(dt) {
   G.fx.update(dt);
   G.zone.update(dt);
   updateTrafficLights(G, G.time);
+  updateWater(G, dt);
+  for (const b of G.boats || []) { b.position.y = WATER + 0.1 + Math.sin(G.time * 1.3) * 0.06; b.rotation.z = Math.sin(G.time * 0.9) * 0.05; }
+  for (const b of G.beams || []) b.rotation.y = G.time * 0.8;
   updateCamera(dt);
   G.hud.update(dt);
   const p = G.player;
@@ -598,6 +706,8 @@ function titleCam(dt) {
   camera.lookAt(0, 6, 0);
   G.camYaw = camera.rotation.y;
   updateTrafficLights(G, G.time);
+  updateWater(G, dt);
+  for (const b of G.beams || []) b.rotation.y = G.time * 0.8;
   G.pieces.update(dt);
   G.loot.update(dt, camera.position);
   G.fx.update(dt);
@@ -624,12 +734,13 @@ function frame(now) {
 const CONTROLS = `
 <div class="controls">
   <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Laufen</div><div><kbd>Shift</kbd> Sprinten</div>
-  <div><kbd>Leertaste</kbd> Springen / Abspringen / Gleiter</div><div><kbd>Maus</kbd> Umsehen</div>
+  <div><kbd>X</kbd> Schleichen (leise, schwer zu entdecken)</div><div><kbd>Shift</kbd> + <kbd>X</kbd> Rutschen</div>
+  <div><kbd>Leertaste</kbd> Springen / Abspringen / Gleiter</div><div><kbd>Maus</kbd> Umsehen &nbsp; <kbd>V</kbd> Bus-Ansicht</div>
   <div><kbd>Linke Maustaste</kbd> Schießen / Hacken / Bauen / Heilen</div><div><kbd>Rechte Maustaste</kbd> Zielen</div>
   <div><kbd>1</kbd> Spitzhacke &nbsp; <kbd>2</kbd>–<kbd>7</kbd> Inventar</div><div><kbd>Mausrad</kbd> Platz wechseln</div>
   <div><kbd>E</kbd> Truhe öffnen / Aufheben</div><div><kbd>R</kbd> Nachladen</div>
-  <div><kbd>Q</kbd> Wand &nbsp;<kbd>F</kbd> Boden &nbsp;<kbd>C</kbd> Rampe</div><div><kbd>G</kbd> / <kbd>Rechte Maustaste</kbd> Material</div>
-  <div><kbd>B</kbd> Baumodus an/aus</div><div><kbd>M</kbd> Karte &nbsp; <kbd>Esc</kbd> Pause</div>
+  <div><kbd>Q</kbd> Wand &nbsp;<kbd>F</kbd> Boden &nbsp;<kbd>C</kbd> Rampe &nbsp;<kbd>B</kbd> Baumodus</div><div><kbd>R</kbd> / <kbd>Rechte Maustaste</kbd> Material (im Baumodus)</div>
+  <div><kbd>G</kbd> Eigenes Bauteil bearbeiten</div><div><kbd>M</kbd> Karte &nbsp; <kbd>Esc</kbd> Pause</div>
 </div>`;
 
 function showScreen(html, cls) {
@@ -655,7 +766,7 @@ function showTitle() {
       </div>
       <button id="btnPlay" class="big">SPIELEN</button>
       ${CONTROLS}
-      <p class="tip">Tipp: Mit der Spitzhacke bekommst du Holz aus Bäumen, Stein aus Felsen und Metall aus Autos, Ampeln und Mülltonnen. Jedes Bauteil kostet 10 Material.</p>
+      <p class="tip">Tipp: Mit der Spitzhacke bekommst du Holz aus Bäumen, Stein aus Felsen und Metall aus Autos, Ampeln und Mülltonnen. Jedes Bauteil kostet 10 Material. Auf dem Boden liegen nur schwache Waffen – die guten sind in den Truhen. Zur Insel im See musst du schwimmen oder eine Brücke bauen.</p>
     </div>`, 'title');
   $('btnPlay').onclick = () => {
     G.settings.bots = Number($('optBots').value);

@@ -116,7 +116,12 @@ kbd {
 #vitals .bar svg { position: absolute; left: 6px; top: 50%; width: 15px; height: 15px; margin-top: -7.5px; fill: #fff; transform: skewX(12deg); }
 #vitals .bar b { position: absolute; right: 10px; top: 50%; transform: translateY(-50%) skewX(12deg); font: 900 17px/1 var(--font); }
 #vitals .sh b { font-size: 13px; }
-#vitals .lbl { font: 800 12px/1 var(--font); letter-spacing: 0.25em; color: var(--dim); }
+#vitals .lbl { font: 800 12px/1 var(--font); letter-spacing: 0.25em; color: var(--dim); display: flex; align-items: center; gap: 10px; }
+#stance { letter-spacing: 0.05em; font: 800 12px/1 var(--font); color: #0d1520; background: #8fd8ff; padding: 3px 8px; border-radius: 10px; text-transform: uppercase; }
+#stance[data-s="Schleichen"] { background: #b9a2ff; }
+#stance[data-s="Rutschen"] { background: #ffd23f; }
+#stance[data-s="Sprinten"] { background: #9dff8a; }
+#buildmat small { margin-left: 8px; color: var(--dim); }
 #vitals.low .hp { animation: pulse 0.8s infinite alternate; border-color: #ff5b5b; }
 @keyframes pulse { to { box-shadow: 0 0 14px rgba(255, 60, 60, 0.8); } }
 
