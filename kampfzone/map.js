@@ -1,11 +1,13 @@
-// Die Karte: Wiese, Wald und Felsen außen, in der Mitte eine Stadt mit 10 Gebäuden, Straßen,
-// Kirche, Ampeln, Mülltonnen, Laternen und parkenden Autos. Dazu Truhen und Bodenbeute.
+// Die Karte: Wiese, Wald, Felsen, Seen und ein Fluss; in der Mitte eine Stadt mit 11 Gebäuden, Straßen,
+// Kirche, Ampeln, Mülltonnen, Laternen und parkenden Autos. Dazu eine Siedlung, ein Bauernhof und eine
+// Insel mit Leuchtturm im Inselsee. Truhen und Bodenbeute überall.
 
 import * as THREE from '../vendor/three.module.js';
 import { merge, boxAt, mat4 } from './geo.js';
 import { STYLES } from './pieces.js';
 import { floorLoot } from './items.js';
 import { GRID, HALF } from './util.js';
+import { buildTerrain, terrainH, shoreDist, WATER, LAKES, ISLAND } from './terrain.js';
 
 export const ROADS = [-64, 0, 64];
 export const CITY = 72;
@@ -23,6 +25,36 @@ const BUILDINGS = [
   { x0: -32, z0: 12,  w: 4, d: 4, floors: 2, style: 'plaster', door: '+x' },
   { x0: -52, z0: 36,  w: 4, d: 4, floors: 3, style: 'brick',   door: '-x' },
   { x0: -28, z0: 36,  w: 4, d: 4, floors: 2, style: 'plaster', door: '+z' },
+  { x0: -28, z0: -28, w: 4, d: 4, floors: 2, style: 'wood',    door: '+z' },
+];
+
+// Siedlung im Westen: Häuser mit Satteldach an einer Dorfstraße (x = −118)
+const SUBURB = [
+  { x0: -140, z0: -32, floors: 2, style: 'plaster', door: '+x' },
+  { x0: -140, z0: -14, floors: 1, style: 'wood',    door: '+x' },
+  { x0: -140, z0: 4,   floors: 2, style: 'brick',   door: '+x' },
+  { x0: -140, z0: 22,  floors: 1, style: 'plaster', door: '+x' },
+  { x0: -140, z0: 40,  floors: 2, style: 'wood',    door: '+x' },
+  { x0: -108, z0: -32, floors: 1, style: 'brick',   door: '-x' },
+  { x0: -108, z0: 12,  floors: 2, style: 'plaster', door: '-x' },
+  { x0: -108, z0: 30,  floors: 1, style: 'wood',    door: '-x' },
+].map(h => ({ ...h, w: 3, d: 3, roof: true }));
+
+// Bauernhof im Osten
+const FARM = [
+  { x0: 116, z0: -12, w: 3, d: 2, floors: 2, style: 'plaster', door: '+z', roof: true },
+  { x0: 120, z0: 8,   w: 4, d: 3, floors: 2, style: 'wood',    door: '-z', roof: true, tint: 0xd8705e },
+];
+
+// Fischerhütte auf der Insel
+const HUT = { x0: 100, z0: 104, w: 3, d: 2, floors: 1, style: 'wood', door: '-z', roof: true, tint: 0xb9d6e8 };
+
+export const PLACES = [
+  { name: 'Stadt', x: 0, z: -78 },
+  { name: 'Kirche', x: 26, z: 60 },
+  { name: 'Siedlung', x: -118, z: -42 },
+  { name: 'Bauernhof', x: 122, z: -26 },
+  { name: 'Insel', x: 108, z: 86 },
 ];
 const TINTS = {
   plaster: [0xfff1d6, 0xffd9cf, 0xd6eaff, 0xdff5d8, 0xfff3b0, 0xf2dcff],
@@ -57,8 +89,9 @@ function texMat(tex, opts = {}) { return new THREE.MeshStandardMaterial({ map: t
 
 // ---------- Prop-Geometrien (Vertex-Farben, für Instanzen) ----------
 
+function cyl(rt, rb, h, seg = 10) { return new THREE.CylinderGeometry(rt, rb, h, seg); }
+
 function propGeos() {
-  const cyl = (rt, rb, h, seg = 10) => new THREE.CylinderGeometry(rt, rb, h, seg);
   const tl = merge([
     { geo: cyl(0.08, 0.1, 3.6).translate(0, 1.8, 0), color: 0x3a3d40 },
     { geo: boxAt(0.36, 1.05, 0.3, 0, 3.05, 0.02), color: 0x222426 },
@@ -110,7 +143,26 @@ function propGeos() {
     { geo: boxAt(0.8, 0.06, 1.6, 0, 0.03, 0.9), color: 0x4f6e33 },
   ]);
   const lampBulb = new THREE.SphereGeometry(0.12, 10, 8);
-  return { tl, bin, lamp, car, bench, pew, grave, lampBulb };
+  const fence = merge([
+    ...[-1.9, 0, 1.9].map(x => ({ geo: boxAt(0.12, 1.1, 0.12, x, 0.55, 0), color: 0x7a5530 })),
+    { geo: boxAt(4, 0.1, 0.05, 0, 0.45, 0), color: 0x8f6a3f },
+    { geo: boxAt(4, 0.1, 0.05, 0, 0.85, 0), color: 0x8f6a3f },
+  ]);
+  const hay = merge([
+    { geo: cyl(0.75, 0.75, 1.3, 16).rotateZ(Math.PI / 2).translate(0, 0.75, 0), color: 0xd9b860 },
+    { geo: cyl(0.6, 0.6, 1.32, 16).rotateZ(Math.PI / 2).translate(0, 0.75, 0), color: 0xc9a54c },
+  ]);
+  const tractor = merge([
+    { geo: boxAt(1.2, 0.8, 2.6, 0, 1.0, 0.2), color: 0x2f8a3a },
+    { geo: boxAt(1.0, 0.6, 1.6, 0, 1.0, -1.2), color: 0x2f8a3a },
+    { geo: boxAt(1.1, 1.1, 1.1, 0, 1.95, 0.7), color: 0x1d2328 },
+    { geo: boxAt(1.2, 0.08, 1.2, 0, 2.55, 0.7), color: 0x2f8a3a },
+    { geo: cyl(0.07, 0.07, 0.8, 8).translate(0.3, 1.9, -1.6), color: 0x222222 },
+    ...[-0.85, 0.85].map(x => ({ geo: cyl(0.85, 0.85, 0.5, 18).rotateZ(Math.PI / 2).translate(x, 0.85, 0.9), color: 0x151515 })),
+    ...[-0.75, 0.75].map(x => ({ geo: cyl(0.45, 0.45, 0.3, 14).rotateZ(Math.PI / 2).translate(x, 0.45, -1.5), color: 0x151515 })),
+    ...[-0.85, 0.85].map(x => ({ geo: cyl(0.45, 0.45, 0.52, 12).rotateZ(Math.PI / 2).translate(x, 0.85, 0.9), color: 0xe8c21a })),
+  ]);
+  return { tl, bin, lamp, car, bench, pew, grave, lampBulb, fence, hay, tractor };
 }
 
 // Bäume und Felsen (flach schattiert, Vertex-Farben)
@@ -145,7 +197,14 @@ function natureGeos() {
     { geo: new THREE.IcosahedronGeometry(0.9, 0).translate(0, 0.6, 0), color: 0x3f7f30 },
     { geo: new THREE.IcosahedronGeometry(0.7, 0).translate(0.6, 0.5, 0.2), color: 0x4a8c38 },
   ]);
-  return { pine, oak, rocks, bush };
+  const reedParts = [];
+  for (let i = 0; i < 9; i++) {
+    const a = i * 2.4, r = 0.15 + (i % 3) * 0.18, h = 1.4 + (i % 4) * 0.35;
+    reedParts.push({ geo: new THREE.ConeGeometry(0.05, h, 4).translate(Math.cos(a) * r, h / 2, Math.sin(a) * r), color: i % 2 ? 0x6f8a3a : 0x8a9a48 });
+    if (i % 3 === 0) reedParts.push({ geo: new THREE.CylinderGeometry(0.05, 0.05, 0.3, 5).translate(Math.cos(a) * r, h * 0.85, Math.sin(a) * r), color: 0x5a3a20 });
+  }
+  const reed = merge(reedParts);
+  return { pine, oak, rocks, bush, reed };
 }
 
 // ---------- Aufbau ----------
@@ -162,10 +221,12 @@ export function buildMap(G) {
   const vmat = P._std('vcolor', { vertexColors: true, roughness: 0.8 });
   const vflat = P._std('vflat', { vertexColors: true, roughness: 0.9, flatShading: true });
 
-  // --- Boden ---
-  const grassTex = tx.grass.clone(); grassTex.repeat.set(150, 150); grassTex.needsUpdate = true;
-  // Wiese leicht nach hinten versetzen, damit Straßen und Pflaster nie flimmern
-  staticMesh(G, new THREE.PlaneGeometry(1200, 1200).rotateX(-Math.PI / 2), texMat(grassTex, { polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 4 }));
+  // --- Gelände mit Seen und Fluss ---
+  buildTerrain(G, tx.grass);
+  W.terrain = terrainH;
+  W.water = WATER;
+  G.boats = [];
+  G.beams = [];
 
   // --- Straßen ---
   const roadParts = [], crossParts = [], zebraParts = [], paveParts = [], walkParts = [];
@@ -174,6 +235,10 @@ export function buildMap(G) {
     roadParts.push({ geo: quad(-68, c - 4, 68, c + 4, 0.02, (x, z) => [(z - c + 4) / 8, x / 16]) });
   }
   for (const cx of ROADS) for (const cz of ROADS) crossParts.push({ geo: quad(cx - 4, cz - 4, cx + 4, cz + 4, 0.026, (x, z) => [x / 8, z / 8]) });
+  roadParts.push({ geo: quad(-114, -4, -68, 4, 0.02, (x, z) => [(z + 4) / 8, x / 16]) });     // zur Siedlung
+  roadParts.push({ geo: quad(-122, -36, -114, 60, 0.02, (x, z) => [(x + 122) / 8, z / 16]) }); // Dorfstraße
+  roadParts.push({ geo: quad(68, -4, 114, 4, 0.02, (x, z) => [(z + 4) / 8, x / 16]) });        // zum Bauernhof
+  crossParts.push({ geo: quad(-122, -4, -114, 4, 0.026, (x, z) => [x / 8, z / 8]) });
   staticMesh(G, merge(roadParts), texMat(tx.road));
   staticMesh(G, merge(crossParts), texMat(tx.asphalt));
   // Zebrastreifen an Kreuzungen mit Ampel
@@ -197,16 +262,18 @@ export function buildMap(G) {
     walk(x1, z0, x1 + 4, z1);
     paveParts.push({ geo: quad(x0, z0, x1, z1, 0.012, (x, z) => [x / 4, z / 4]) });
   }
-  walk(68, -72, 72, 72); walk(-72, -72, -68, 72); walk(-68, 68, 68, 72); walk(-68, -72, 68, -68);
+  walk(68, -72, 72, -4); walk(68, 4, 72, 72); walk(-72, -72, -68, -4); walk(-72, 4, -68, 72);
+  walk(-68, 68, 68, 72); walk(-68, -72, 68, -68);
   staticMesh(G, merge(walkParts, { planar: 4, half: 0 }), texMat(tx.sidewalk));
   staticMesh(G, merge(paveParts), texMat(tx.paving));
-  occupied.push([-74, -74, 74, 74]);
+  occupied.push([-74, -74, 74, 74], [-146, -40, -92, 64], [-116, -7, -72, 7], [72, -7, 114, 7], [108, -20, 152, 32], [95, 92, 121, 117]);
 
   // --- Gebäude ---
   const floorDecor = [];
-  for (const def of BUILDINGS) {
-    const tint = rng.pick(TINTS[def.style]);
+  for (const def of [...BUILDINGS, ...SUBURB, ...FARM, HUT]) {
+    const tint = def.tint ?? rng.pick(TINTS[def.style]);
     building(G, def, tint, lootSpots, chestSpots, floorDecor);
+    if (def.roof) pitchedRoof(G, def, tint);
     info.buildings.push([def.x0, def.z0, def.x0 + def.w * GRID, def.z0 + def.d * GRID, def.style]);
   }
   staticMesh(G, merge(floorDecor), texMat(tx.woodFloor));
@@ -220,12 +287,15 @@ export function buildMap(G) {
   const pools = {
     tl: P.pool('p-tl', () => ({ geo: PG.tl, mat: vmat, cap: 24 })),
     bulb: P.pool('p-bulb', () => ({ geo: PG.lampBulb, mat: new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }), cap: 80, shadow: false })),
-    bin: P.pool('p-bin', () => ({ geo: PG.bin, mat: vmat, cap: 70 })),
-    lamp: P.pool('p-lamp', () => ({ geo: PG.lamp, mat: vmat, cap: 30 })),
-    car: P.pool('p-car', () => ({ geo: PG.car, mat: P._std('car', { vertexColors: true, roughness: 0.35, metalness: 0.4 }), cap: 20 })),
+    bin: P.pool('p-bin', () => ({ geo: PG.bin, mat: vmat, cap: 90 })),
+    lamp: P.pool('p-lamp', () => ({ geo: PG.lamp, mat: vmat, cap: 40 })),
+    car: P.pool('p-car', () => ({ geo: PG.car, mat: P._std('car', { vertexColors: true, roughness: 0.35, metalness: 0.4 }), cap: 28 })),
     bench: P.pool('p-bench', () => ({ geo: PG.bench, mat: vmat, cap: 16 })),
     pew: P.pool('p-pew', () => ({ geo: PG.pew, mat: vmat, cap: 16 })),
     grave: P.pool('p-grave', () => ({ geo: PG.grave, mat: vmat, cap: 20 })),
+    fence: P.pool('p-fence', () => ({ geo: PG.fence, mat: vmat, cap: 70 })),
+    hay: P.pool('p-hay', () => ({ geo: PG.hay, mat: vmat, cap: 12 })),
+    tractor: P.pool('p-tractor', () => ({ geo: PG.tractor, mat: P._std('tractor', { vertexColors: true, roughness: 0.45, metalness: 0.3 }), cap: 3 })),
   };
   G.propPools = pools;
 
@@ -278,6 +348,9 @@ export function buildMap(G) {
   });
 
   pews(G, pools);
+  suburbProps(G, pools);
+  farmProps(G, pools, chestSpots, lootSpots);
+  island(G, chestSpots, lootSpots);
 
   // Kirchplatz: Brunnen, Bänke, Bäume
   fountain(G, 46, 30);
@@ -298,6 +371,7 @@ export function buildMap(G) {
   const trees = [];
   const freeAt = (x, z, r) => {
     if (Math.abs(x) > HALF - 5 || Math.abs(z) > HALF - 5) return false;
+    if (shoreDist(x, z) < r + 1.5) return false;
     for (const [x0, z0, x1, z1] of occupied) if (x > x0 - r && x < x1 + r && z > z0 - r && z < z1 + r) return false;
     for (const t of trees) if ((t[0] - x) ** 2 + (t[1] - z) ** 2 < (r + t[2]) ** 2) return false;
     return true;
@@ -319,9 +393,12 @@ export function buildMap(G) {
     trees.push([x, z, 2.6, rng() < 0.55 ? 'pine' : 'oak']);
   }
   // ein paar Bäume in der Stadt (Kirchplatz, Höfe)
-  for (const [x, z] of [[40, 13], [53, 13], [40, 49], [53, 49], [12, 20], [12, 44], [-20, -24], [-44, 30], [28, -44], [52, -20], [-11, 20]]) {
+  for (const [x, z] of [[40, 13], [53, 13], [40, 49], [53, 49], [12, 20], [12, 44], [-20, -34], [-44, 30], [28, -44], [52, -20], [-11, 20]]) {
     trees.push([x, z, 2, 'oak', true]);
   }
+  // Gärten der Siedlung, Hof und Insel
+  for (const [x, z] of [[-146, -24], [-146, 12], [-146, 30], [-92, -20], [-92, 24], [-92, 40], [104, 117], [117, 108], [100, 98], [148, -10]]) trees.push([x, z, 2, 'oak', true]);
+  for (const [x, z] of [[96, 112], [118, 114]]) trees.push([x, z, 2, 'pine', true]);
   for (const [x, z, , kind] of trees) tree(G, npool, x, z, kind, rng);
   info.trees = trees.map(t => [t[0], t[1]]);
   // Felsen
@@ -341,6 +418,17 @@ export function buildMap(G) {
     npool.bush.add(mat4(x, 0, z, rng() * 6, 0.8 + rng() * 0.6), [0.85 + rng() * 0.3, 0.9 + rng() * 0.2, 0.85]);
     if (npool.bush.n >= 120) break;
   }
+  // Schilf an den Seeufern (Deko)
+  const reeds = P.pool('n-reed', () => ({ geo: NG.reed, mat: vflat, cap: 160, shadow: false }));
+  for (const Lk of LAKES) {
+    const n = Math.round(Lk.r * 1.3);
+    for (let i = 0; i < n; i++) {
+      if (rng() < 0.35) continue;
+      const a = rng() * Math.PI * 2, rr = Lk.r - 0.5 + rng() * 1.5;
+      const x = Lk.x + Math.cos(a) * rr, z = Lk.z + Math.sin(a) * rr;
+      reeds.add(mat4(x, terrainH(x, z) - 0.1, z, rng() * 6, 0.8 + rng() * 0.5), [0.9 + rng() * 0.2, 0.9 + rng() * 0.2, 0.8]);
+    }
+  }
   // Waldrand außerhalb der Karte (Deko)
   for (let i = 0; i < 160; i++) {
     const side = i % 4, t = rng.range(-175, 175), off = HALF + 6 + rng() * 22;
@@ -355,29 +443,30 @@ export function buildMap(G) {
     const t = rng.pick(trees.filter(t => !t[4]));
     const a = rng() * Math.PI * 2;
     const x = t[0] + Math.cos(a) * (t[2] + 0.6), z = t[1] + Math.sin(a) * (t[2] + 0.6);
-    if (Math.abs(x) > HALF - 6 || Math.abs(z) > HALF - 6) continue;
+    if (Math.abs(x) > HALF - 6 || Math.abs(z) > HALF - 6 || shoreDist(x, z) < 2) continue;
     chestSpots.push([x, 0, z, Math.atan2(t[0] - x, t[1] - z) + Math.PI]);
   }
-  for (let i = 0; i < 400 && lootSpots.length < 60; i++) {
+  // Bodenbeute (schlechte Waffen) – mehr Plätze
+  for (let i = 0; i < 600 && lootSpots.length < 95; i++) {
     const x = rng.range(-150, 150), z = rng.range(-150, 150);
     if (!freeAt(x, z, 1.5)) continue;
     lootSpots.push([x, 0, z]);
-    if (i > 200) break;
   }
   for (const [x, y, z, yaw] of chestSpots) L.addChest(x, y, z, Math.round(yaw / (Math.PI / 2)) * (Math.PI / 2));
   for (const [x, y, z] of lootSpots) {
     const items = floorLoot(rng);
-    items.forEach((it, i) => { const p = L.spawn(it, x + i * 0.7, y + 0.3, z); p.settled = false; });
+    items.forEach((it, i) => { const p = L.spawn(it, x + i * 0.7, y + 0.3, z); p.settled = false; p.floor = true; });
   }
 
   // --- Kartenrand ---
   const E = HALF;
-  W.box(-E - 2, 0, -E - 2, E + 2, 400, -E);
-  W.box(-E - 2, 0, E, E + 2, 400, E + 2);
-  W.box(-E - 2, 0, -E, -E, 400, E);
-  W.box(E, 0, -E, E + 2, 400, E);
+  W.box(-E - 2, -10, -E - 2, E + 2, 400, -E);
+  W.box(-E - 2, -10, E, E + 2, 400, E + 2);
+  W.box(-E - 2, -10, -E, -E, 400, E);
+  W.box(E, -10, -E, E + 2, 400, E);
 
   info.chests = chestSpots.map(c => [c[0], c[2]]);
+  info.roads = [[-114, -4, -68, 4], [-122, -36, -114, 60], [68, -4, 114, 4]];
   return info;
 }
 
@@ -688,4 +777,156 @@ function rock(G, npool, x, z, rng) {
     parts: [{ pool: npool.rocks[v], m: mat4(x, 0, z, rng() * 6, sx, sy, sz), color: [g, g, g] }],
     boxes: [[x - r, 0, z - r, x + r, (0.35 + 0.75) * sy * 0.95, z + r]], center: new THREE.Vector3(x, 0.8 * sy, z),
   });
+}
+
+// ---------- Satteldach ----------
+
+function pitchedRoof(G, def, tint) {
+  const P = G.pieces, W = G.world;
+  const x0 = def.x0, z0 = def.z0, x1 = x0 + def.w * GRID, z1 = z0 + def.d * GRID;
+  const alongX = def.w > def.d;                       // First entlang der längeren Seite
+  const len = (alongX ? def.w : def.d) * GRID, span = (alongX ? def.d : def.w) * GRID;
+  const half = span / 2, rise = Math.min(4, half * 0.6), slope = Math.hypot(half, rise);
+  const th = Math.atan2(rise, half);
+  const y = def.floors * GRID + 0.2;
+  const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+  const pool = P.pool(`roof-${len}x${span}`, () => {
+    const t = G.tex.roofTiles.clone();
+    t.repeat.set(slope / 4, len / 4);
+    t.needsUpdate = true;
+    return { geo: new THREE.BoxGeometry(slope + 0.7, 0.3, len + 0.8).translate(0, -0.15, 0), mat: P._std(`roof-${len}x${span}`, { map: t }), cap: 24 };
+  });
+  const S = STYLES[def.style];
+  const mk = (px, pz, ry, rz, sl) => P.create({
+    kind: 'roof', name: 'Dach', hp: 320, yieldMat: S.mat, yieldHit: 5, debris: 0x9a4630, sound: 'stein',
+    parts: [{ pool, m: mat4(px, y + rise / 2, pz, ry, 1, 1, 1, 0, rz) }], slopes: [sl], center: new THREE.Vector3(px, y + rise / 2, pz),
+  });
+  if (!alongX) {
+    mk(cx - half / 2, cz, 0, th, [x0, z0, cx, z1, y, rise, 0, 1]);
+    mk(cx + half / 2, cz, 0, -th, [cx, z0, x1, z1, y, rise, 0, -1]);
+  } else {
+    mk(cx, cz - half / 2, Math.PI / 2, -th, [x0, z0, x1, cz, y, rise, 2, 1]);
+    mk(cx, cz + half / 2, Math.PI / 2, th, [x0, cz, x1, z1, y, rise, 2, -1]);
+  }
+  // Giebeldreiecke
+  const tri = new THREE.Shape([new THREE.Vector2(-half, 0), new THREE.Vector2(half, 0), new THREE.Vector2(0, rise)]);
+  const col = new THREE.Color(S.edge).multiply(new THREE.Color(tint));
+  const gm = new THREE.MeshStandardMaterial({ color: col, roughness: 0.85 });
+  for (const end of [0, 1]) {
+    const g = new THREE.ExtrudeGeometry(tri, { depth: 0.25, bevelEnabled: false });
+    if (!alongX) g.translate(cx, y, end ? z1 - 0.25 : z0);
+    else g.rotateY(Math.PI / 2).translate(end ? x1 - 0.25 : x0, y, cz);
+    staticMesh(G, g, gm, { shadow: true });
+  }
+  void W;
+}
+
+// ---------- Siedlung ----------
+
+function suburbProps(G, pools) {
+  const rng = G.rng;
+  const BIN_COLS = [0x5a6066, 0x2d5fb5, 0xe2bd2a, 0x7a4a2a];
+  for (const h of SUBURB) {
+    const front = h.door === '+x' ? h.x0 + 12 + 1.2 : h.x0 - 1.2;
+    trashBin(G, pools, front, h.z0 + 1.5, h.door === '+x' ? -Math.PI / 2 : Math.PI / 2, rng.pick(BIN_COLS));
+    trashBin(G, pools, front, h.z0 + 2.4, h.door === '+x' ? -Math.PI / 2 : Math.PI / 2, rng.pick(BIN_COLS));
+    // Gartenzaun an der Rückseite
+    const back = h.door === '+x' ? h.x0 - 4 : h.x0 + 16;
+    for (let z = h.z0 + 2; z < h.z0 + 12; z += 4) fence(G, pools, back, z, Math.PI / 2);
+  }
+  for (const z of [-24, 8, 36, 54]) streetLamp(G, pools, -123.2, z, Math.PI / 2);
+  for (const [z, yaw, col] of [[-6.5, 0, 0x2e86de], [24, Math.PI, 0xc0392b], [46, 0, 0x7f8c8d]]) car(G, pools, -115.8, z, yaw, col);
+}
+
+// ---------- Bauernhof ----------
+
+function farmProps(G, pools, chestSpots, lootSpots) {
+  // Silo
+  const silo = new THREE.MeshStandardMaterial({ color: 0xb8c2c8, metalness: 0.6, roughness: 0.4 });
+  staticMesh(G, cyl(2.6, 2.6, 13, 20).translate(142, 6.5, 14), silo, { shadow: true });
+  staticMesh(G, new THREE.SphereGeometry(2.6, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2).translate(142, 13, 14), silo, { shadow: true });
+  G.world.box(140, 0, 12, 144, 14.5, 16);
+  // Heuballen, Traktor, Zaun
+  for (const [x, z, yaw] of [[131, -7, 0], [133.5, -6.5, 0.3], [138, -3, 1.2], [128, 25, 0.1], [131, 26, 1.5], [146, 24, 0.6]]) {
+    G.pieces.create({
+      kind: 'prop', name: 'Heuballen', hp: 90, yieldMat: 'holz', yieldHit: 6, bonus: 4, debris: 0xd9b860, sound: 'holz',
+      parts: [{ pool: pools.hay, m: mat4(x, 0, z, yaw) }], boxes: [[x - 0.75, 0, z - 0.75, x + 0.75, 1.5, z + 0.75]], center: new THREE.Vector3(x, 0.75, z),
+    });
+  }
+  G.pieces.create({
+    kind: 'prop', name: 'Traktor', hp: 400, yieldMat: 'metall', yieldHit: 10, bonus: 15, debris: 0x2f8a3a, sound: 'metall',
+    parts: [{ pool: pools.tractor, m: mat4(126, 0, 1, Math.PI / 2) }],
+    boxes: [[124.4, 0, 0.3, 127.6, 1.4, 1.7], [125.2, 1.4, 0.4, 126.8, 2.6, 1.6]], center: new THREE.Vector3(126, 1, 1),
+  });
+  for (let x = 114; x < 150; x += 4) fence(G, pools, x, -18, 0);
+  for (let z = -16; z < 32; z += 4) if (z < -6 || z > 6) fence(G, pools, 150, z, Math.PI / 2);
+  chestSpots.push([136, 0, -7, Math.PI], [145.5, 0, 18, -Math.PI / 2]);
+  lootSpots.push([124, 0, 2.5], [140, 0, 24]);
+}
+
+function fence(G, pools, x, z, yaw) {
+  const along = Math.abs(Math.sin(yaw)) > 0.5;   // gedreht → entlang z
+  const hx = along ? 0.12 : 2, hz = along ? 2 : 0.12;
+  G.pieces.create({
+    kind: 'prop', name: 'Zaun', hp: 70, yieldMat: 'holz', yieldHit: 4, bonus: 3, debris: 0x8f6a3f, sound: 'holz',
+    parts: [{ pool: pools.fence, m: mat4(x, 0, z, yaw) }], boxes: [[x - hx, 0, z - hz, x + hx, 1.1, z + hz]], center: new THREE.Vector3(x, 0.6, z),
+  });
+}
+
+// ---------- Insel im Inselsee: Leuchtturm, Fischerhütte, Steg, Ruderboot ----------
+
+function stripeTexture() {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 256;
+  const x = c.getContext('2d');
+  for (let i = 0; i < 6; i++) { x.fillStyle = i % 2 ? '#f2f0ea' : '#c7302a'; x.fillRect(0, i * 256 / 6, 64, 256 / 6 + 1); }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function island(G, chestSpots, lootSpots) {
+  const W = G.world;
+  const LX = ISLAND.x + 5, LZ = ISLAND.z - 8;                  // Leuchtturm
+  const st = new THREE.MeshStandardMaterial({ map: stripeTexture(), roughness: 0.6 });
+  staticMesh(G, cyl(1.85, 2.45, 15, 24).translate(LX, 7.5, LZ), st, { shadow: true });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x2a2d30, roughness: 0.5, metalness: 0.4 });
+  staticMesh(G, cyl(2.5, 2.5, 0.3, 24).translate(LX, 15.15, LZ), dark, { shadow: true });
+  staticMesh(G, cyl(1.35, 1.35, 1.8, 16).translate(LX, 16.2, LZ), new THREE.MeshStandardMaterial({ color: 0xfff1b0, emissive: 0xffd34a, emissiveIntensity: 1.2, transparent: true, opacity: 0.85 }));
+  staticMesh(G, new THREE.ConeGeometry(1.6, 1.4, 16).translate(LX, 17.8, LZ), new THREE.MeshStandardMaterial({ color: 0xa82822, roughness: 0.5 }), { shadow: true });
+  staticMesh(G, boxAt(1.2, 2.2, 0.2, LX, 1.1, LZ + 2.35), new THREE.MeshStandardMaterial({ color: 0x3d2a1a }));
+  W.box(LX - 2.2, 0, LZ - 2.2, LX + 2.2, 15.3, LZ + 2.2);
+  // drehender Lichtkegel
+  const beam = new THREE.Mesh(new THREE.ConeGeometry(2.2, 34, 16, 1, true).translate(0, -17, 0).rotateZ(Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0xfff2b0, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  beam.position.set(LX, 16.2, LZ);
+  G.mapGroup.add(beam);
+  G.beams.push(beam);
+  // Steg nach Westen mit Leiter am Ende
+  const deckTex = G.tex.woodFloor.clone(); deckTex.repeat.set(4, 1); deckTex.needsUpdate = true;
+  const DX0 = 80, DX1 = ISLAND.x - ISLAND.r + 1.5, DZ = ISLAND.z;
+  staticMesh(G, boxAt(DX1 - DX0, 0.25, 2.4, (DX0 + DX1) / 2, 0.22, DZ), new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.9 }), { shadow: true });
+  W.box(DX0, 0.1, DZ - 1.2, DX1, 0.35, DZ + 1.2);
+  const posts = [];
+  for (let x = DX0 + 0.3; x < DX1; x += 2.5) for (const dz of [-1.1, 1.1]) posts.push({ geo: cyl(0.12, 0.12, 4, 6).translate(x, -1.8, DZ + dz) });
+  for (let y = -1.7; y < 0.2; y += 0.4) posts.push({ geo: boxAt(0.08, 0.06, 1.0, DX0 - 0.45, y, DZ) });
+  for (const dz of [-0.5, 0.5]) posts.push({ geo: boxAt(0.08, 2.6, 0.08, DX0 - 0.45, -0.7, DZ + dz) });
+  staticMesh(G, merge(posts), new THREE.MeshStandardMaterial({ color: 0x5a3d22, roughness: 0.9 }));
+  W.slope(DX0 - 1, DZ - 0.6, DX0, DZ + 0.6, -2.1, 2.45, 0, 1);    // Leiter aus dem Wasser
+  // Ruderboot (schaukelt)
+  const boat = new THREE.Group();
+  const hull = new THREE.LatheGeometry([new THREE.Vector2(0.01, -0.35), new THREE.Vector2(0.55, -0.3), new THREE.Vector2(0.75, 0), new THREE.Vector2(0.8, 0.25)], 14);
+  const hm = new THREE.Mesh(hull, new THREE.MeshStandardMaterial({ color: 0xf0f0ea, roughness: 0.6, side: THREE.DoubleSide }));
+  hm.scale.set(1, 1, 3.2);
+  const seat = new THREE.Mesh(boxAt(1.4, 0.06, 0.35, 0, 0.1, 0), new THREE.MeshStandardMaterial({ color: 0x7a4b28 }));
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.05, 6, 20).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x2e6fb0 }));
+  rim.scale.set(1, 3.2, 1); rim.position.y = 0.25;
+  boat.add(hm, seat, rim);
+  boat.position.set(85, WATER + 0.1, DZ + 3.2);
+  boat.rotation.y = 0.3;
+  G.mapGroup.add(boat);
+  G.boats.push(boat);
+  // Beute auf der Insel
+  chestSpots.push([LX, 0, LZ + 3.4, 0], [DX0 + 1.5, 0.35, DZ, -Math.PI / 2]);
+  lootSpots.push([ISLAND.x - 6, 0, ISLAND.z - 5], [ISLAND.x + 2, 0, ISLAND.z + 10]);
 }

@@ -40,7 +40,7 @@ const res = await page.evaluate(() => {
   G.debug.give('sturmgewehr', 2);
   key('Digit' + (p.inv.slots.findIndex(s => s && s.id === 'sturmgewehr') + 2));
   const bot = G.bots[0];
-  G.debug.tp(-30, 0.2, -2); bot.pos.set(-45, 0, -2);
+  G.debug.tp(88, 0.2, 0); bot.pos.set(103, 0, 0);    // freie Landstraße zum Bauernhof
   G.debug.step(20);
   G.mouse.l = true;
   for (let i = 0; i < 40 && bot.alive; i++) aimCam(bot.pos.x, bot.pos.y + 1.1, bot.pos.z);
@@ -65,6 +65,40 @@ const res = await page.evaluate(() => {
   G.debug.tp(13, 0.05, -38); p.yaw = -Math.PI / 2;
   G.keys.KeyW = true; G.debug.step(90); G.keys.KeyW = false;
   out.stairsY = +p.pos.y.toFixed(2);
+  // Rutschen aus dem Sprint
+  G.debug.tp(0, 0.2, -20); p.yaw = 0; G.debug.step(5);
+  G.keys.KeyW = true; G.keys.ShiftLeft = true; G.debug.step(40);
+  key('KeyX'); G.debug.step(6);
+  out.slideSpeed = +Math.hypot(p.vel.x, p.vel.z).toFixed(1);
+  G.keys.ShiftLeft = false; G.debug.step(70);
+  out.crouchAfterSlide = p.crouch && p.h < 1.5;
+  G.keys.KeyW = false; key('KeyX'); G.debug.step(5);
+  // Schwimmen im Inselsee bis zur Insel
+  G.debug.tp(80, 0.2, 80); p.yaw = Math.atan2(-(108 - 80), -(106 - 80));
+  G.keys.KeyW = true;
+  for (let i = 0; i < 600 && !p.swimming; i++) G.debug.step(1);
+  out.swam = p.swimming;
+  for (let i = 0; i < 900 && p.swimming; i++) G.debug.step(1);
+  G.debug.step(40); G.keys.KeyW = false;
+  out.islandDist = +Math.hypot(p.pos.x - 108, p.pos.z - 106).toFixed(1);
+  // Bauen + Bearbeiten: Tür in die Wand schneiden und durchgehen
+  G.debug.tp(60, 0.05, 102); p.yaw = 0; p.pitch = 0.1; p.inv.mats.holz = 100; G.debug.step(3);
+  key('KeyQ'); G.debug.step(2); G.mouse.l = true; G.debug.step(2); G.mouse.l = false; G.debug.step(2);
+  key('Digit1'); G.debug.step(5);
+  const wall = [...G.pieces.all].find(q => q.built && q.meta && q.meta.kind === 'wall' && Math.abs(q.center.x - 62) < 3);
+  key('KeyG'); G.debug.step(2);
+  const f = G.pieces.frame(wall);
+  const aimAt = (lx, ly) => { const wx = f.ox + lx, wy = f.oy + ly, wz = f.oz; const c = G.camera.position; for (let i = 0; i < 3; i++) { p.yaw = Math.atan2(-(wx - c.x), -(wz - c.z)); p.pitch = Math.atan2(wy - c.y, Math.hypot(wx - c.x, wz - c.z)); G.debug.step(1); } };
+  aimAt(0, 0.66); G.mouse.l = true; G.fireQueued = true; G.debug.step(1);
+  aimAt(0, 2.0); G.debug.step(1); G.mouse.l = false; G.debug.step(1);
+  key('KeyG'); G.debug.step(2);
+  out.editMask = wall.edit;
+  p.pos.set(f.ox, 0.05, f.oz + 2); p.yaw = 0; p.pitch = 0; G.debug.step(2);
+  G.keys.KeyW = true; G.debug.step(60); G.keys.KeyW = false;
+  out.throughDoor = p.pos.z < f.oz - 1;
+  // Bodenbeute: nur schwache Waffen
+  const floorW = G.loot.pickups.filter(q => q.floor && q.item.k === 'w');
+  out.floorWeaponsBad = floorW.length > 20 && floorW.every(q => q.item.r <= 1 && !['scharfschuetze', 'raketenwerfer'].includes(q.item.id));
   // Runde mit Bots im Zeitraffer
   G.bots.forEach((b, i) => { b.brain.update = bots[i]; });
   G.debug.tp(0, 0.2, -6);
@@ -76,7 +110,7 @@ const res = await page.evaluate(() => {
 await browser.close();
 
 const checks = [
-  ['10 Gebäude', res.buildings === 10],
+  ['mehr Häuser (≥ 20 Gebäude)', res.buildings >= 20],
   ['Kirche', res.church],
   ['Ampeln', res.trafficLights >= 10],
   ['Mülltonnen', res.bins >= 20],
@@ -86,6 +120,13 @@ const checks = [
   ['Holz mit Spitzhacke', res.woodGained > 0],
   ['Wand/Boden/Rampe gebaut', res.built === 3],
   ['Treppe hoch (y ≈ 4,2)', res.stairsY > 4],
+  ['Rutschen schneller als Sprinten', res.slideSpeed > 8.5],
+  ['nach dem Rutschen geduckt', res.crouchAfterSlide],
+  ['Schwimmen im See', res.swam],
+  ['zur Insel geschwommen', res.islandDist < 17],
+  ['Wand bearbeitet (Tür)', res.editMask === 0b10010],
+  ['durch die Tür gelaufen', res.throughDoor],
+  ['Bodenbeute nur schwach', res.floorWeaponsBad],
   ['Runde endet (≤ 1 übrig)', res.alive <= 1],
   ['keine Fehler', errors.length === 0],
 ];

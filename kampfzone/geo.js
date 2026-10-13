@@ -84,7 +84,7 @@ export class InstPool {
     let i;
     if (this.free.length) i = this.free.pop();
     else {
-      if (this.n >= this.cap) { console.warn('InstPool voll'); return -1; }
+      if (this.n >= this.cap) { console.warn("InstPool voll", this.mesh.name); return -1; }
       i = this.n++;
       this.mesh.count = this.n;
     }

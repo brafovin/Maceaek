@@ -156,6 +156,11 @@ export class Fx {
   }
 
   impact(p, n, color) {
+    if (color === 'water') {
+      _c.setRGB(0.8, 0.9, 1);
+      for (let i = 0; i < 6; i++) this.soft.emit(p.x, p.y, p.z, (Math.random() - 0.5) * 1.5, 2 + Math.random() * 3, (Math.random() - 0.5) * 1.5, _c, 0.5, 0.3, 0.1, 12, 0.5);
+      return;
+    }
     _c.set(color);
     for (let i = 0; i < 5; i++) {
       const nx = n ? n[0] : 0, ny = n ? n[1] : 0.5, nz = n ? n[2] : 0;
@@ -174,6 +179,14 @@ export class Fx {
     }
     _c2.setRGB(0.6, 0.58, 0.55);
     for (let i = 0; i < 8; i++) this.soft.emit(p.x + (Math.random() - 0.5) * 2, p.y, p.z + (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, 1 + Math.random(), (Math.random() - 0.5) * 2, _c2, 1.2, 1.2, 3.5, 0, 1);
+  }
+
+  splash(p) {
+    _c.setRGB(0.85, 0.93, 1);
+    for (let i = 0; i < 26; i++) {
+      const a = Math.random() * Math.PI * 2, s = 1 + Math.random() * 3;
+      this.soft.emit(p.x, p.y, p.z, Math.cos(a) * s, 3 + Math.random() * 4, Math.sin(a) * s, _c, 0.6 + Math.random() * 0.4, 0.45, 0.15, 12, 0.5);
+    }
   }
 
   sparkle(p, color, n = 10, spread = 1) {

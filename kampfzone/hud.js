@@ -5,7 +5,8 @@ import { fmtTime, HALF } from './util.js';
 import { iconFor, RARITY, WEAPONS, HEALS, itemName, itemRarity } from './items.js';
 import { current, SLOTS } from './inventory.js';
 import { MAT_ORDER, KIND_LABEL, BUILD_MATS } from './pieces.js';
-import { ROADS } from './map.js';
+import { ROADS, PLACES } from './map.js';
+import { LAKES, RIVERS } from './terrain.js';
 import * as THREE from '../vendor/three.module.js';
 
 const $ = id => document.getElementById(id);
@@ -76,6 +77,26 @@ export class Hud {
     for (const [tx, tz] of info.trees) { x.beginPath(); x.arc(P(tx), P(tz), 3.2, 0, 7); x.fill(); }
     x.fillStyle = '#8b8a85';
     for (const [rx, rz] of info.rocks) { x.beginPath(); x.arc(P(rx), P(rz), 3.5, 0, 7); x.fill(); }
+    // Seen, Fluss, Insel
+    x.lineCap = 'round'; x.lineJoin = 'round';
+    for (const R of RIVERS) {
+      x.strokeStyle = '#d8c48c'; x.lineWidth = (R.w + 2) * 2 * S;
+      x.beginPath(); R.pts.forEach(([px, pz], i) => i ? x.lineTo(P(px), P(pz)) : x.moveTo(P(px), P(pz))); x.stroke();
+    }
+    for (const L of LAKES) { x.fillStyle = '#d8c48c'; x.beginPath(); x.arc(P(L.x), P(L.z), (L.r + 2) * S, 0, 7); x.fill(); }
+    for (const R of RIVERS) {
+      x.strokeStyle = '#3f86c4'; x.lineWidth = R.w * 2 * S;
+      x.beginPath(); R.pts.forEach(([px, pz], i) => i ? x.lineTo(P(px), P(pz)) : x.moveTo(P(px), P(pz))); x.stroke();
+    }
+    for (const L of LAKES) {
+      x.fillStyle = '#3f86c4'; x.beginPath(); x.arc(P(L.x), P(L.z), L.r * S, 0, 7); x.fill();
+      if (L.island) {
+        x.fillStyle = '#d8c48c'; x.beginPath(); x.arc(P(L.island.x), P(L.island.z), L.island.r * S, 0, 7); x.fill();
+        x.fillStyle = '#5b8f3f'; x.beginPath(); x.arc(P(L.island.x), P(L.island.z), (L.island.r - 2) * S, 0, 7); x.fill();
+      }
+    }
+    x.fillStyle = '#4a4d52';
+    for (const [x0, z0, x1, z1] of info.roads || []) x.fillRect(P(x0), P(z0), (x1 - x0) * S, (z1 - z0) * S);
     // Stadt
     x.fillStyle = '#b8b3a8'; x.fillRect(P(-72), P(-72), 144 * S, 144 * S);
     x.fillStyle = '#4a4d52';
@@ -96,8 +117,12 @@ export class Hud {
     }
     x.fillStyle = '#4b8fc7'; x.beginPath(); x.arc(P(46), P(30), 3.3 * S, 0, 7); x.fill();
     x.font = 'bold 22px system-ui, sans-serif'; x.fillStyle = 'rgba(255,255,255,0.85)'; x.textAlign = 'center';
-    x.fillText('STADT', P(0), P(-76));
-    x.fillText('Kirche', P(26), P(60));
+    for (const pl of PLACES) {
+      x.lineWidth = 4; x.strokeStyle = 'rgba(0,0,0,0.45)'; x.strokeText(pl.name.toUpperCase(), P(pl.x), P(pl.z));
+      x.fillText(pl.name.toUpperCase(), P(pl.x), P(pl.z));
+    }
+    // Leuchtturm
+    x.fillStyle = '#c7302a'; x.beginPath(); x.arc(P(113), P(98), 5, 0, 7); x.fill();
     this.mapImg = c;
   }
 
@@ -142,7 +167,7 @@ export class Hud {
     const px = 6 + spread * (window.innerHeight / (2 * Math.tan(G.camera.fov * Math.PI / 360)));
     const ch = $('crosshair');
     ch.style.setProperty('--gap', Math.min(80, px).toFixed(1) + 'px');
-    ch.dataset.mode = G.buildMode ? 'build' : cur === 'pickaxe' ? 'pick' : W && W.pellets ? 'shotgun' : 'gun';
+    ch.dataset.mode = G.buildMode || G.editing ? 'build' : cur === 'pickaxe' ? 'pick' : W && W.pellets ? 'shotgun' : 'gun';
     ch.hidden = !!G.scoped || !p.alive || p.state === 'bus';
     $('scope').hidden = !G.scoped;
     // Aufforderung (E)
@@ -157,13 +182,26 @@ export class Hud {
         pr.innerHTML = `<kbd>E</kbd> ${full && inv.sel > 0 ? 'Tauschen' : 'Aufheben'}: <b style="color:${RARITY[r].color}">${itemName(it)}${extra}</b>` + (it.k === 'w' ? ` <small>${RARITY[r].name}</small>` : '');
       }
       pr.hidden = false;
+    } else if (G.editing) {
+      const k = G.editing.pc.meta.kind;
+      pr.innerHTML = (k === 'ramp' ? '<kbd>LMT</kbd> Rampe drehen' : '<kbd>LMT</kbd> Kacheln wählen (ziehen)') + ' · <kbd>RMT</kbd> zurücksetzen · <kbd>G</kbd> bestätigen';
+      pr.hidden = false;
     } else if (p.state === 'bus') {
-      pr.innerHTML = '<kbd>Leertaste</kbd> Abspringen';
+      const wait = G.bus.doors - G.bus.t;
+      pr.innerHTML = (wait > 0 ? `Türen öffnen in <b>${Math.ceil(wait)}</b>` : '<kbd>Leertaste</kbd> Abspringen') + ` · <kbd>V</kbd> Ansicht: ${G.busView}`;
+      pr.hidden = false;
+    } else if (G.editHint && !G.buildMode && p.alive) {
+      pr.innerHTML = `<kbd>G</kbd> ${G.editHint.name} bearbeiten`;
       pr.hidden = false;
     } else if (p.state === 'fall') {
       pr.innerHTML = '<kbd>Leertaste</kbd> Gleiter öffnen';
       pr.hidden = false;
     } else pr.hidden = true;
+    // Haltung (Sprinten, Schleichen, Rutschen, Schwimmen)
+    const sprinting = (G.keys.ShiftLeft || G.keys.ShiftRight) && !p.crouch && p.state === 'ground' && Math.hypot(p.vel.x, p.vel.z) > 6.5;
+    const stance = !p.alive || p.state !== 'ground' ? '' : p.swimming ? 'Schwimmen' : p.slideT > 0 ? 'Rutschen' : p.crouch ? 'Schleichen' : sprinting ? 'Sprinten' : p.wading ? 'Waten' : '';
+    const se = $('stance');
+    if (se.dataset.s !== stance) { se.dataset.s = stance; se.textContent = stance; se.hidden = !stance; }
     // Bau-Leiste
     $('buildbar').hidden = !G.buildMode;
     document.body.classList.toggle('building', G.buildMode);
@@ -207,7 +245,7 @@ export class Hud {
     else if (cur) { nm.textContent = itemName(cur) + (cur.k === 'h' ? ` (${cur.n})` : ''); nm.style.color = RARITY[itemRarity(cur)].color; }
     else nm.textContent = '';
     for (const k in this.pieceEls) this.pieceEls[k].classList.toggle('sel', G.buildKind === k);
-    $('buildmat').innerHTML = `<kbd>G</kbd> / <kbd>RMT</kbd> ${MAT_ICON[G.buildMat]}<span>${BUILD_MATS[G.buildMat].name} (${inv.mats[G.buildMat]})</span>`;
+    $('buildmat').innerHTML = `<kbd>R</kbd> / <kbd>RMT</kbd> ${MAT_ICON[G.buildMat]}<span>${BUILD_MATS[G.buildMat].name} (${inv.mats[G.buildMat]})</span><small><kbd>G</kbd> Bearbeiten</small>`;
   }
 
   drawMinimap() {
