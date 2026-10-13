@@ -10,14 +10,16 @@ import { Sfx } from './sfx.js';
 import { Zone } from './zone.js';
 import { Hud } from './hud.js';
 import { buildMap, updateTrafficLights } from './map.js';
-import { Actor, OUTFITS, attack, select, startReload, stepActor, animate, updateTimers, rayActors, crouchToggle } from './actors.js';
+import { Actor, attack, select, startReload, stepActor, animate, updateTimers, rayActors, crouchToggle } from './actors.js';
 import { WATER, updateWater } from './terrain.js';
 import { Brain, BOT_NAMES } from './bots.js';
 import { current, give } from './inventory.js';
 import { WEAPONS, itemName, makeWeapon } from './items.js';
 import { makeRng, forward, clamp, fmtTime, HALF, wrapAngle } from './util.js';
 import { merge } from './geo.js';
-import { makeBus, SEATS } from './bus.js';
+import { makeBus, SEATS, PLAYER_SEAT } from './bus.js';
+import { PLAYABLE } from './skins.js';
+import { SkinPreview } from './preview.js';
 import { Vehicles } from './vehicles.js';
 import { Post } from './post.js';
 import { Grass } from './grass.js';
@@ -30,7 +32,7 @@ const $ = id => document.getElementById(id);
 
 const SETTINGS_KEY = 'kampfzone.settings';
 function loadSettings() {
-  const def = { sens: 1, vol: 0.7, shadows: true, quality: 'hoch', bots: 19, diff: 'normal' };
+  const def = { sens: 1, vol: 0.7, shadows: true, quality: 'hoch', bots: 19, diff: 'normal', skin: 'rekrut' };
   // Grafikstufen: ultra | hoch | niedrig
   try { return { ...def, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; } catch { return def; }
 }
@@ -170,9 +172,9 @@ G.busView = 'innen';
 
 // Sitzplatz einer Figur im Bus (Weltkoordinaten der Füße)
 G.seatPos = (a, out, dy = 0.6, kx = 1) => {
-  const [x, z] = SEATS[Math.max(0, a.seat) % SEATS.length];
+  const [x, z, up] = SEATS[Math.max(0, a.seat) % SEATS.length];
   busMesh.updateMatrixWorld();
-  return out.set(x * kx, dy, z).applyMatrix4(busMesh.matrixWorld);
+  return out.set(x * kx, dy + up, z).applyMatrix4(busMesh.matrixWorld);
 };
 
 function applyQuality() {
@@ -268,13 +270,16 @@ function newGame() {
   G.stats = { dmg: 0, start: 0 };
   G.buildMode = false; G.buildMat = 'holz'; G.buildKind = 'wall';
   G.killer = null; G.placement = 0; G.endShown = false;
-  const player = new Actor(G, { name: 'Du', isPlayer: true, outfit: OUTFITS[0] });
+  const mySkin = PLAYABLE.find(k => k.id === S.skin) || PLAYABLE[0];
+  const player = new Actor(G, { name: 'Du', isPlayer: true, skin: mySkin });
   G.player = player;
   G.actors = [player];
   const names = [...BOT_NAMES].sort(() => rng() - 0.5);
   const nBots = Number(params.get('bots') ?? S.bots);
+  // Bots bekommen gemischte Skins (gleichmäßig verteilt, zufällige Reihenfolge)
+  const skins = PLAYABLE.filter(k => k !== mySkin).sort(() => rng() - 0.5);
   for (let i = 0; i < nBots; i++) {
-    const b = new Actor(G, { name: names[i % names.length], outfit: OUTFITS[1 + (i % (OUTFITS.length - 1))] });
+    const b = new Actor(G, { name: names[i % names.length], skin: skins[i % skins.length] });
     new Brain(G, b, S.diff);
     G.actors.push(b);
     G.bots.push(b);
@@ -282,7 +287,7 @@ function newGame() {
   planBus(rng);
   // Sitzplätze verteilen; der Spieler bekommt einen Fensterplatz
   const seats = SEATS.map((_, i) => i).sort(() => rng() - 0.5);
-  const win = seats.indexOf(16);        // Fensterplatz links in der Mitte (freie Sicht)
+  const win = seats.indexOf(PLAYER_SEAT);   // Fensterplatz links in der Mitte (freie Sicht)
   [seats[0], seats[win]] = [seats[win], seats[0]];
   G.actors.forEach((a, i) => { a.state = 'bus'; a.seat = seats[i % seats.length]; G.seatPos(a, a.pos); a.yaw = G.bus.yaw; });
   for (const b of G.bots) b.brain.planDrop(G.bus, rng);
@@ -608,7 +613,8 @@ function controlPlayer(dt) {
   G.carNear = p.state === 'ground' && !p.swimming ? G.vehicles.nearest(p.pos) : null;
   const ip = G.interact && (G.interact.chest ? G.interact.chest.pos : G.interact.pickup.pos);
   G.interactD = ip ? Math.hypot(ip.x - p.pos.x, ip.z - p.pos.z) : Infinity;
-  G.carNearD = G.carNear ? Math.hypot(G.carNear.pos.x - p.pos.x, G.carNear.pos.z - p.pos.z) - 1.2 : Infinity;
+  G.carNearD = G.carNear ? G.carNear.nearD : Infinity;
+  if (G.carNear && !G.carHint) { G.carHint = true; G.hud.notice(`${G.carNear.T.name} in der Nähe – mit E einsteigen und losfahren!`, 'info', 3.2); }
 }
 
 // ---------- Kamera ----------
@@ -661,7 +667,7 @@ function updateCamera(dt) {
     p.pitch = clamp(p.pitch, -0.7, 0.45);
     forward(p.yaw, p.pitch - 0.12, _F);
     _H.set(v.pos.x, v.pos.y + 1.9, v.pos.z);
-    const dist = v.type === 'traktor' ? 7 : 7.5 + Math.abs(v.speed) * 0.06;
+    const dist = (v.T.cam || 7.5) + Math.abs(v.speed) * 0.06;
     _O.copy(_H).addScaledVector(_F, -dist);
     _O.y += 0.6;
     _D.subVectors(_O, _H);
@@ -765,7 +771,13 @@ function update(dt) {
     busMesh.position.y += Math.sin(B.t * 1.3) * 0.4;
     busMesh.rotation.z = Math.sin(B.t * 0.9) * 0.012;
     for (const w of BUS.wheels) w.rotation.x -= dt * 3;
-    BUS.flame.scale.set(1, 0.8 + Math.random() * 0.5, 1);
+    const fl = 0.8 + Math.random() * 0.5;
+    BUS.flame.scale.set(1, fl, 1);
+    BUS.balloon.material.emissiveIntensity = 0.24 + fl * 0.12;     // Brenner lässt die Hülle aufglühen
+    // Türen schwenken auf, sobald man aussteigen darf
+    const prevT = B.t - dt;
+    if (prevT < B.doors && B.t >= B.doors && G.player && G.player.state === 'bus') G.sfx.play('door', 0.8);
+    BUS.setDoors(Math.min(1, Math.max(0, (B.t - B.doors) / 0.8)));
     if (B.t >= B.dur) for (const a of G.actors) if (a.state === 'bus') G.eject(a);
     for (const a of G.actors) if (a.state === 'bus') { G.seatPos(a, a.pos); if (!a.isPlayer) a.yaw = B.yaw; }
     if (B.t > B.dur + 6) busMesh.visible = false;
@@ -826,7 +838,7 @@ function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   if (G.state === 'play' || G.state === 'end') update(dt);
-  else if (G.state === 'title') titleCam(dt);
+  else if (G.state === 'title') { titleCam(dt); if (G.preview) G.preview.render(dt); }
   updateClocks();
   const fp = G.state === 'title' || !G.player ? camera.position : G.player.pos;
   sun.position.set(fp.x + SUN.x * 160, fp.y + SUN.y * 160, fp.z + SUN.z * 160);
@@ -873,18 +885,36 @@ function showTitle() {
     <div class="panel title-panel">
       <h1 class="logo">KAMPF<span>ZONE</span></h1>
       <p class="sub">Spring aus dem Bus, plündere Truhen, baue Deckung – und überlebe bis zum Schluss.</p>
-      <div class="opts">
-        <label>Gegner <select id="optBots">${[9, 14, 19, 29].map(n => `<option ${n === S.bots ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
-        <label>Grafik <select id="optQuality">${QSEL(S.quality)}</select></label>
-        <label>Schwierigkeit <select id="optDiff">${[['leicht', 'Leicht'], ['normal', 'Normal'], ['schwer', 'Schwer']].map(([v, n]) => `<option value="${v}" ${v === S.diff ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+      <div class="start">
+        <canvas id="skinView" title="Dein Skin"></canvas>
+        <div class="startcol">
+          <div class="opts">
+            <label>Skin <select id="optSkin">${PLAYABLE.map(k => `<option value="${k.id}" ${k.id === S.skin ? 'selected' : ''}>${k.name}</option>`).join('')}</select></label>
+            <label>Gegner <select id="optBots">${[9, 14, 19, 29].map(n => `<option ${n === S.bots ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+            <label>Grafik <select id="optQuality">${QSEL(S.quality)}</select></label>
+            <label>Schwierigkeit <select id="optDiff">${[['leicht', 'Leicht'], ['normal', 'Normal'], ['schwer', 'Schwer']].map(([v, n]) => `<option value="${v}" ${v === S.diff ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+          </div>
+          <button id="btnPlay" class="big">SPIELEN</button>
+        </div>
       </div>
-      <button id="btnPlay" class="big">SPIELEN</button>
       ${CONTROLS}
-      <p class="tip">Tipp: Mit der Spitzhacke bekommst du Holz aus Bäumen, Stein aus Felsen und Metall aus Autos, Ampeln und Mülltonnen. Jedes Bauteil kostet 10 Material. Auf dem Boden liegen nur schwache Waffen – die guten sind in den Truhen. Zur Insel im See musst du schwimmen oder eine Brücke bauen. Autos kannst du fahren – aber Vorsicht vor Fallschaden und Unfällen!</p>
+      <p class="tip">Tipp: Mit der Spitzhacke bekommst du Holz aus Bäumen, Stein aus Felsen und Metall aus Autos, Ampeln und Mülltonnen. Jedes Bauteil kostet 10 Material. Auf dem Boden liegen nur schwache Waffen – die guten sind in den Truhen. Zur Insel im See musst du schwimmen oder eine Brücke bauen. Autos (weiße Symbole auf der Minikarte) fährst du mit <kbd>E</kbd> – aber Vorsicht: Unfälle und Stürze ab ca. 4 m kosten Leben!</p>
     </div>`, 'title');
+  // Skin-Vorschau (dreht sich langsam)
+  if (G.preview) G.preview.dispose();
+  G.preview = null;
+  try {
+    G.preview = new SkinPreview($('skinView'));
+    G.preview.show(PLAYABLE.find(k => k.id === S.skin) || PLAYABLE[0]);
+  } catch (e) { console.warn('Skin-Vorschau nicht verfügbar', e); }
+  $('optSkin').onchange = e => {
+    S.skin = e.target.value; saveSettings();
+    if (G.preview) G.preview.show(PLAYABLE.find(k => k.id === S.skin) || PLAYABLE[0]);
+  };
   $('btnPlay').onclick = () => {
     G.settings.bots = Number($('optBots').value);
     G.settings.diff = $('optDiff').value;
+    G.settings.skin = $('optSkin').value;
     if (G.settings.quality !== $('optQuality').value) { G.settings.quality = $('optQuality').value; applyQuality(); }
     saveSettings();
     G.sfx.init();
@@ -893,6 +923,7 @@ function showTitle() {
 }
 
 function startPlaying() {
+  if (G.preview) { G.preview.dispose(); G.preview = null; }
   newGame();
   hideScreen();
   $('hud').hidden = false;

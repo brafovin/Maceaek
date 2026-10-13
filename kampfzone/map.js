@@ -5,6 +5,7 @@
 import * as THREE from '../vendor/three.module.js';
 import { merge, boxAt, mat4 } from './geo.js';
 import { STYLES } from './pieces.js';
+import { CAR_MODELS, carGeometry, carMaterials } from './cars.js';
 import { floorLoot } from './items.js';
 import { GRID, HALF } from './util.js';
 import { buildTerrain, terrainH, shoreDist, WATER, LAKES, ISLAND, HILL_MAX } from './terrain.js';
@@ -114,17 +115,6 @@ function propGeos() {
     { geo: boxAt(0.36, 0.16, 0.6, 0, 6.0, 1.55), color: 0x3a3d40 },
     { geo: boxAt(0.3, 0.04, 0.5, 0, 5.91, 1.55), color: 0xfff3c4 },
   ]);
-  const car = merge([
-    { geo: boxAt(1.85, 0.62, 4.2, 0, 0.62, 0), color: 0xffffff },
-    { geo: boxAt(1.65, 0.56, 2.2, 0, 1.2, 0.2), color: 0x23303b },
-    { geo: boxAt(1.6, 0.08, 2.0, 0, 1.5, 0.2), color: 0xffffff },
-    { geo: boxAt(1.86, 0.18, 0.1, 0, 0.6, -2.12), color: 0x333333 },
-    { geo: boxAt(0.35, 0.12, 0.05, -0.6, 0.78, -2.11), color: 0xfff6c8 },
-    { geo: boxAt(0.35, 0.12, 0.05, 0.6, 0.78, -2.11), color: 0xfff6c8 },
-    { geo: boxAt(0.35, 0.12, 0.05, -0.6, 0.78, 2.11), color: 0xd02020 },
-    { geo: boxAt(0.35, 0.12, 0.05, 0.6, 0.78, 2.11), color: 0xd02020 },
-    ...[[-0.86, -1.35], [0.86, -1.35], [-0.86, 1.35], [0.86, 1.35]].map(([x, z]) => ({ geo: cyl(0.34, 0.34, 0.24, 14).rotateZ(Math.PI / 2).translate(x, 0.34, z), color: 0x151515 })),
-  ]);
   const bench = merge([
     { geo: boxAt(1.8, 0.07, 0.5, 0, 0.46, 0), color: 0x8a5a30 },
     { geo: boxAt(1.8, 0.4, 0.06, 0, 0.75, 0.24), color: 0x8a5a30 },
@@ -162,7 +152,7 @@ function propGeos() {
     ...[-0.75, 0.75].map(x => ({ geo: cyl(0.45, 0.45, 0.3, 14).rotateZ(Math.PI / 2).translate(x, 0.45, -1.5), color: 0x151515 })),
     ...[-0.85, 0.85].map(x => ({ geo: cyl(0.45, 0.45, 0.52, 12).rotateZ(Math.PI / 2).translate(x, 0.85, 0.9), color: 0xe8c21a })),
   ]);
-  return { tl, bin, lamp, car, bench, pew, grave, lampBulb, fence, hay, tractor };
+  return { tl, bin, lamp, bench, pew, grave, lampBulb, fence, hay, tractor };
 }
 
 // Bäume und Felsen (flach schattiert, Vertex-Farben)
@@ -290,7 +280,7 @@ export function buildMap(G) {
     bulb: P.pool('p-bulb', () => ({ geo: PG.lampBulb, mat: new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }), cap: 80, shadow: false })),
     bin: P.pool('p-bin', () => ({ geo: PG.bin, mat: vmat, cap: 90 })),
     lamp: P.pool('p-lamp', () => ({ geo: PG.lamp, mat: vmat, cap: 40 })),
-    car: P.pool('p-car', () => ({ geo: PG.car, mat: P._std('car', { vertexColors: true, roughness: 0.35, metalness: 0.4 }), cap: 28 })),
+    car: m => P.pool('p-car-' + m, () => ({ geo: carGeometry(m), mat: carMaterials(), cap: 24 })),
     bench: P.pool('p-bench', () => ({ geo: PG.bench, mat: vmat, cap: 16 })),
     pew: P.pool('p-pew', () => ({ geo: PG.pew, mat: vmat, cap: 16 })),
     grave: P.pool('p-grave', () => ({ geo: PG.grave, mat: vmat, cap: 20 })),
@@ -342,7 +332,8 @@ export function buildMap(G) {
       const along = s.a + 10 + rng() * (s.b - s.a - 20);
       const [x, z] = at(along, side * 2.2);
       const yaw = s.axis === 'x' ? Math.PI / 2 : 0;
-      car(G, pools, x, z, yaw + (rng() < 0.5 ? Math.PI : 0), rng.pick([0xc0392b, 0x2e86de, 0xf1c40f, 0xecf0f1, 0x2c3e50, 0x27ae60, 0x7f8c8d, 0xe67e22]));
+      const model = rng.pick(['limousine', 'limousine', 'kleinwagen', 'kleinwagen', 'transporter']);
+      car(G, pools, x, z, yaw + (rng() < 0.5 ? Math.PI : 0), rng.pick(model === 'transporter' ? VAN_COLS : CAR_COLS), model);
     }
     // Beute am Straßenrand
     if (n % 3 === 0) { const [x, z] = at((s.a + s.b) / 2 + 6, -side * 6); lootSpots.push([x, 0.15, z]); }
@@ -712,16 +703,21 @@ function streetLamp(G, pools, x, z, yaw) {
   });
 }
 
-function car(G, pools, x, z, yaw, color) {
+// Autofarben (Lack): Silber, Schwarz, Weiß, Dunkelblau, Rot, Graphit, Blau, Grün, Orange, Beige
+const CAR_COLS = [0xb9bdc1, 0x1c1e21, 0xeceff1, 0x1f3a5f, 0x9e1b1b, 0x4a4f55, 0x2a5b9c, 0x2f5d3a, 0xc77d24, 0xd9c9a3];
+const VAN_COLS = [0xf2f2f0, 0xf2f2f0, 0xb9bdc1, 0xf2c200, 0x2a5b9c];
+
+function car(G, pools, x, z, yaw, color, model = 'limousine') {
+  const M = CAR_MODELS[model];
   const along = Math.abs(Math.sin(yaw)) > 0.5;   // Längsachse entlang x
-  const hx = along ? 2.1 : 0.93, hz = along ? 0.93 : 2.1;
+  const hl = M.L / 2, hw = M.w / 2;
+  const hx = along ? hl : hw, hz = along ? hw : hl;
   const pc = G.pieces.create({
-    kind: 'prop', name: 'Auto', hp: 450, yieldMat: 'metall', yieldHit: 10, bonus: 15, debris: color, sound: 'metall',
-    parts: [{ pool: pools.car, m: mat4(x, 0.02, z, yaw), color }],
-    boxes: [[x - hx, 0, z - hz, x + hx, 0.95, z + hz], [x - hx * 0.55, 0.95, z - hz * 0.8, x + hx * 0.55, 1.55, z + hz * 0.8]],
-    center: new THREE.Vector3(x, 0.8, z),
+    kind: 'prop', name: 'Auto', hp: model === 'transporter' ? 520 : 450, yieldMat: 'metall', yieldHit: 10, bonus: 15, debris: color, sound: 'metall',
+    parts: [{ pool: pools.car(model), m: mat4(x, 0.02, z, yaw), color }],
+    boxes: [[x - hx, 0, z - hz, x + hx, M.cab.yb, z + hz]], center: new THREE.Vector3(x, 0.8, z),
   });
-  G.vehicles.register(pc, 'auto', x, z, yaw);      // fahrbar (E)
+  G.vehicles.register(pc, 'auto', x, z, yaw, model);      // fahrbar (E)
 }
 
 function bench(G, pools, x, z, yaw) {
@@ -846,8 +842,8 @@ function suburbProps(G, pools) {
     for (let z = h.z0 + 2; z < h.z0 + 12; z += 4) fence(G, pools, back, z, Math.PI / 2);
   }
   for (const z of [-24, 8, 36, 54]) streetLamp(G, pools, -123.2, z, Math.PI / 2);
-  for (const [z, yaw, col] of [[-6.5, 0, 0x2e86de], [24, Math.PI, 0xc0392b], [46, 0, 0x7f8c8d]]) car(G, pools, -115.8, z, yaw, col);
-  car(G, pools, -100, 0, Math.PI / 2, 0xf1c40f);           // an der Landstraße
+  for (const [z, yaw, col, m] of [[-6.5, 0, 0x2a5b9c, 'kleinwagen'], [24, Math.PI, 0x9e1b1b, 'limousine'], [46, 0, 0xf2f2f0, 'transporter']]) car(G, pools, -115.8, z, yaw, col, m);
+  car(G, pools, -100, 0, Math.PI / 2, 0xc77d24, 'kleinwagen');           // an der Landstraße
 }
 
 // ---------- Bauernhof ----------
@@ -871,7 +867,7 @@ function farmProps(G, pools, chestSpots, lootSpots) {
     boxes: [[124.4, 0, 0.3, 127.6, 1.4, 1.7], [125.2, 1.4, 0.4, 126.8, 2.6, 1.6]], center: new THREE.Vector3(126, 1, 1),
   });
   G.vehicles.register(tractor, 'traktor', 126, 1, Math.PI / 2);
-  car(G, pools, 141, 0.5, -Math.PI / 2, 0x8e44ad);        // Auto auf dem Hof
+  car(G, pools, 141, 0.5, -Math.PI / 2, 0x2f5d3a, 'transporter');        // Lieferwagen auf dem Hof
   for (let x = 114; x < 150; x += 4) fence(G, pools, x, -18, 0);
   for (let z = -16; z < 32; z += 4) if (z < -6 || z > 6) fence(G, pools, 150, z, Math.PI / 2);
   chestSpots.push([136, 0, -7, Math.PI], [145.5, 0, 18, -Math.PI / 2]);

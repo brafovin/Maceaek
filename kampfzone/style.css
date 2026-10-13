@@ -188,6 +188,11 @@ body.building #ammoLine, body.building #itemName { visibility: hidden; }
 .panel h2 { margin: 0 0 14px; font-size: 30px; }
 .panel .sub { color: var(--dim); font-size: 16px; margin: 10px 0 18px; }
 .opts { display: flex; gap: 16px; justify-content: center; margin-bottom: 18px; flex-wrap: wrap; }
+.start { display: flex; gap: 24px; align-items: center; justify-content: center; flex-wrap: wrap; margin-bottom: 4px; }
+.startcol { display: flex; flex-direction: column; align-items: center; gap: 16px; max-width: 480px; }
+.startcol .opts { margin-bottom: 0; }
+#skinView { width: 150px; height: 190px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.14);
+  background: radial-gradient(ellipse at 50% 35%, rgba(120, 170, 230, 0.35), rgba(20, 30, 45, 0.6) 70%); }
 .opts label, .settings label { display: flex; align-items: center; gap: 8px; font-weight: 700; }
 select, input[type="range"] { accent-color: var(--accent); }
 select { background: #1c2a3c; color: var(--ink); border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 6px; padding: 5px 8px; font: 600 15px var(--font); }

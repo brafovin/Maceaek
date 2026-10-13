@@ -18,8 +18,16 @@ page.on('console', m => { if (m.type() === 'error') errors.push('console.error: 
 await page.goto(`${base}/kampfzone/index.html?test=1&auto=1&skipbus=1&seed=7`);
 await page.waitForFunction(() => window.KZ && window.KZ.ready, null, { timeout: 60000 });
 
+const busInfo = await page.evaluate(async () => {
+  const { SEATS, PLAYER_SEAT } = await import('./bus.js');
+  return { seats: SEATS.length, playerSeat: PLAYER_SEAT, parts: window.KZ.bus.mesh.children.length };
+});
+
 const res = await page.evaluate(() => {
   const G = window.KZ, p = G.player, out = {};
+  out.skins = new Set(G.actors.map(a => a.skin.id)).size;
+  out.joints = !!(p.model.kneeL && p.model.elbowR);
+  out.carModels = new Set(G.vehicles.list.filter(v => v.type === 'auto').map(v => v.model)).size;
   const key = code => window.dispatchEvent(new KeyboardEvent('keydown', { code }));
   const aimCam = (x, y, z) => { for (let i = 0; i < 4; i++) { const c = G.camera.position; const dx = x - c.x, dy = y - c.y, dz = z - c.z; p.yaw = Math.atan2(-dx, -dz); p.pitch = Math.atan2(dy, Math.hypot(dx, dz)); G.debug.step(1); } };
   const bots = G.bots.map(b => b.brain.update);
@@ -101,11 +109,17 @@ const res = await page.evaluate(() => {
   out.floorWeaponsBad = floorW.length > 20 && floorW.every(q => q.item.r <= 1 && !['scharfschuetze', 'raketenwerfer'].includes(q.item.id));
   // Fallschaden: 12 m tief fallen
   p.hp = 100; p.shield = 0;
-  G.debug.tp(30, 12, -100); G.debug.step(120);
+  const gy = G.world.terrain(30, -100);
+  G.debug.tp(30, gy + 12, -100); G.debug.step(120);
   out.fallDamage = 100 - p.hp;
   p.hp = 100;
+  G.debug.tp(30, gy + 3.4, -100); G.debug.step(90);
+  out.fallSmall = 100 - p.hp;
+  G.debug.tp(30, gy + 6, -100); G.debug.step(90);
+  out.fall6 = 100 - p.hp;
+  p.hp = 100;
   // Auto fahren: einsteigen, Gas geben, aussteigen; dabei einen Bot überfahren
-  const car = G.vehicles.list.find(v => v.type === 'auto');
+  const car = G.vehicles.list.find(v => v.model === 'limousine');
   car.pos.set(80, 0, 0); car.yaw = -Math.PI / 2; car.speed = 0; G.vehicles.place(car);
   G.debug.tp(80, 0.05, 2.6); G.debug.step(3);
   key('KeyE'); G.debug.step(2);
@@ -115,6 +129,7 @@ const res = await page.evaluate(() => {
   const hpVictim = victim.hp;
   G.keys.KeyW = true; G.debug.step(120); G.keys.KeyW = false;
   out.carSpeed = +(car.speed * 3.6).toFixed(0);
+  out.wheelSpin = Math.abs(car.spin) > 5;
   out.runOver = victim.hp < hpVictim || !victim.alive;
   G.keys.Space = true; G.debug.step(120); G.keys.Space = false;
   key('KeyE'); G.debug.step(20);
@@ -130,6 +145,11 @@ const res = await page.evaluate(() => {
 await browser.close();
 
 const checks = [
+  ['Bus: Sitzplätze für alle (≥ 30), Fensterplatz', busInfo.seats >= 30 && busInfo.playerSeat >= 0],
+  ['Bus: detailliertes Modell', busInfo.parts > 80],
+  ['verschiedene Skins (≥ 6)', res.skins >= 6],
+  ['Figuren mit Knie- und Ellbogengelenken', res.joints],
+  ['mehrere Automodelle', res.carModels >= 2],
   ['mehr Häuser (≥ 20 Gebäude)', res.buildings >= 20],
   ['Kirche', res.church],
   ['Ampeln', res.trafficLights >= 10],
@@ -147,15 +167,18 @@ const checks = [
   ['Wand bearbeitet (Tür)', res.editMask === 0b10010],
   ['durch die Tür gelaufen', res.throughDoor],
   ['Bodenbeute nur schwach', res.floorWeaponsBad],
-  ['Fallschaden aus 12 m', res.fallDamage > 20 && res.fallDamage < 60],
+  ['Fallschaden aus 12 m', res.fallDamage > 30 && res.fallDamage < 75],
+  ['kein Fallschaden aus 3,4 m', res.fallSmall === 0],
+  ['Fallschaden aus 6 m', res.fall6 > 5],
   ['ins Auto eingestiegen', res.inCar],
   ['Auto fährt (> 60 km/h)', res.carSpeed > 60],
+  ['Räder drehen sich', res.wheelSpin],
   ['Bot überfahren', res.runOver],
   ['ausgestiegen', res.exited],
   ['Runde endet (≤ 1 übrig)', res.alive <= 1],
   ['keine Fehler', errors.length === 0],
 ];
-console.log(JSON.stringify(res));
+console.log(JSON.stringify({ ...busInfo, ...res }));
 let failed = 0;
 for (const [name, ok] of checks) { console.log((ok ? 'OK    ' : 'FEHLER') + ' ' + name); if (!ok) failed++; }
 if (errors.length) console.log(errors.join('\n'));

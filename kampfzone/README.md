@@ -6,13 +6,18 @@ gegen Bots, schwimmst durch Seen und musst vor der schrumpfenden Zone fliehen. W
 
 ## Starten
 
-ES-Module laufen nicht über `file://`, deshalb einen kleinen Webserver im **Repo-Verzeichnis** starten:
+ES-Module laufen nicht über `file://`, deshalb einen kleinen Webserver starten – am besten den mitgelieferten,
+der den Browser-Cache abschaltet (so sieht man nach einem Update sofort die neue Version):
 
 ```sh
-python3 -m http.server 8000
+python3 kampfzone/server.py
 ```
 
 und dann <http://localhost:8000/kampfzone/> öffnen. Gespielt wird mit Maus und Tastatur.
+
+> **Neue Version, aber alles sieht aus wie vorher?** Dann liefert der Browser noch alte Dateien aus dem Cache.
+> Seite mit `Strg` + `F5` (Mac: `Cmd` + `Shift` + `R`) neu laden oder `kampfzone/server.py` statt
+> `python3 -m http.server` benutzen.
 
 ## Steuerung
 
@@ -29,7 +34,7 @@ und dann <http://localhost:8000/kampfzone/> öffnen. Gespielt wird mit Maus und 
 | rechte Maustaste | zielen (Scharfschützengewehr: Zielfernrohr) · im Baumodus: Material wechseln · beim Bearbeiten: zurücksetzen |
 | `1` | Spitzhacke |
 | `2` – `7` | die 6 Inventarplätze (auch Mausrad) |
-| `E` | Truhe öffnen / Gegenstand aufheben (bei vollem Inventar: mit dem gewählten Platz tauschen) / ins Auto ein- und aussteigen |
+| `E` | Truhe öffnen / Gegenstand aufheben (bei vollem Inventar: mit dem gewählten Platz tauschen) / ins Auto ein- und aussteigen (einfach neben ein Auto stellen – unten erscheint „E Einsteigen“) |
 | im Auto: `W` `S` | Gas geben / bremsen und rückwärts |
 | im Auto: `A` `D` | lenken |
 | im Auto: `Leertaste` / `H` | Handbremse / Hupe |
@@ -44,9 +49,19 @@ und dann <http://localhost:8000/kampfzone/> öffnen. Gespielt wird mit Maus und 
 
 * **HUD:** unten links Leben (grün) und Schild (blau), unten rechts das Inventar mit Spitzhacke + 6 Plätzen,
   darüber Munition und Baumaterial; oben rechts Minikarte, Zonen-Timer, Spieler übrig und Eliminierungen.
-* **Battle-Bus:** ein realistischer gelber Linienbus (Fenster, Glastüren, Sitzreihen, Haltestangen, Fahrer,
-  Zielanzeige „KAMPFZONE“) hängt an einem Heißluftballon. Alle Spieler sitzen sichtbar darin; die Türen öffnen
-  nach 3 Sekunden. Mit `V` wechselst du zwischen Sitzplatz-Ansicht und Außenansicht.
+* **Battle-Bus:** ein 12-m-Niederflur-Linienbus mit echter Karosserie: gewölbtes Dach, Radläufe, Zwillingsreifen
+  hinten, Felgen mit Radmuttern, Scheinwerfer, Rückleuchten, „Hörner“-Spiegel, Scheibenwischer, Klimaanlage auf dem
+  Dach, LED-Zielanzeigen („7 KAMPFZONE“), Lackierung mit Schriftzug, Liniennummer und Werbeflächen. Die zwei
+  Schwenkschiebetüren gehen nach 3 Sekunden mit Geräusch auf. Innen: Polstersitze mit Velours-Muster (über den
+  Radkästen erhöht), gelbe Haltestangen mit Haltewunschtastern, Fahrgastinfo-Bildschirm („Nächster Halt: Absprung“),
+  Fahrerplatz mit Busfahrer am Lenkrad. Der Bus hängt an einem Heißluftballon mit 24 Stoffbahnen, Lastbändern,
+  Brenner und Seilen; die Hülle glüht beim Feuern des Brenners. Mit `V` wechselst du zwischen Sitzplatz-Ansicht
+  und Außenansicht.
+* **Skins:** zehn realistische Figuren mit menschlichen Proportionen, Gesicht (Augen, Brauen, Nase, Mund, Ohren),
+  Frisuren und Kleidung – Rekrut, Soldat, Polizistin, Feuerwehrmann, Bauarbeiterin, Sportler, Ärztin, Rocker,
+  Wanderer, Agentin. Knie und Ellbogen sind beweglich: Laufen, Rennen, Ducken, Rutschen, Sitzen und Schwimmen
+  sehen natürlich aus, die Hände greifen Waffe, Spitzhacke und Lenkrad. Deinen Skin wählst du im Hauptmenü
+  (mit drehender 3D-Vorschau); die Bots bekommen die anderen.
 * **Truhen** (golden, funkeln) stehen in den Häusern, in der Kirche, am Straßenrand, im Wald, auf dem Bauernhof
   und auf der Insel. Jede gibt eine gute Waffe mit Munition, oft Heilung und 30 Baumaterial.
   **Auf dem Boden liegen nur schwache Waffen** (grau/grün: Pistole, MP, Schrotflinte, Sturmgewehr).
@@ -62,12 +77,17 @@ und dann <http://localhost:8000/kampfzone/> öffnen. Gespielt wird mit Maus und 
   Rechte Maustaste setzt zurück, `G` bestätigt.
 * **Bewegung:** Sprinten (`Shift`), Schleichen (`X`, lautlos und für Bots schwer zu entdecken) und Rutschen
   (`X` während des Sprints – kurzer Geschwindigkeitsschub, danach geduckt). Schritte sind zu hören, beim Schleichen nicht.
-* **Autos:** alle geparkten Autos (Stadt, Siedlung, Landstraße, Bauernhof) und der Traktor lassen sich fahren.
-  Räder folgen Hügeln, Bordsteinen und gebauten Rampen – mit Rampen springt man. Zusammenstöße beschädigen
-  Auto und Fahrer, wer überfahren wird, nimmt Schaden. Zerschossene Autos explodieren. Im tiefen Wasser säuft der
-  Motor ab. Tacho und Fahrzeugzustand unten in der Mitte.
-* **Fallschaden:** ab etwa 5 m Fallhöhe, ab etwa 25 m tödlich (ohne Schild-Schutz) – mit Anzeige, Geräusch und
-  Kamerawackeln. Gleiter und Landungen im Wasser sind sicher; harte Landungen mit dem Auto tun weh.
+* **Autos fahren:** Stell dich neben ein geparktes Auto (Stadt, Siedlung, Landstraße, Bauernhof – auf der
+  Minikarte als weiße Autosymbole zu sehen) und drück `E`. Dann `W` Gas, `S` Bremse/Rückwärts, `A`/`D` lenken,
+  `Leertaste` Handbremse, `H` Hupe, `E` Aussteigen. Es gibt drei Modelle mit eigenen Fahrwerten: **Limousine**
+  (schnell), **Kleinwagen** (wendig) und **Transporter** (groß, träge) – mit Metallic-Lack, getönten Scheiben,
+  Innenraum, Scheinwerfern, Rückleuchten und Alufelgen; die Räder drehen sich, die Vorderräder lenken ein.
+  Der Traktor auf dem Bauernhof fährt auch. Räder folgen Hügeln, Bordsteinen und gebauten Rampen – mit Rampen
+  springt man. Zusammenstöße beschädigen Auto und Fahrer, wer überfahren wird, nimmt Schaden. Zerschossene Autos
+  explodieren. Im tiefen Wasser säuft der Motor ab. Tacho und Fahrzeugzustand unten in der Mitte.
+* **Fallschaden:** ab etwa 4 m Fallhöhe (ein Stockwerk), ab etwa 20 m tödlich (ohne Schild-Schutz) – mit
+  Schadensanzeige, Geräusch, Kamerawackeln und Abfedern in den Knien. Gleiter und Landungen im Wasser sind
+  sicher; harte Landungen mit dem Auto tun weh.
 * **Grafik:** sanfte Hügel, Gras und Bäume im Wind, Spiegelungen von Himmel und Sonne (Wasser, Glasfassaden,
   Autos), Leuchteffekte, Farbabstimmung und Vignette. Stufen im Menü: *Ultra*, *Hoch* (Standard), *Niedrig*
   (ohne Nachbearbeitung und Gras, für schwächere Rechner).
@@ -93,17 +113,19 @@ und dann <http://localhost:8000/kampfzone/> öffnen. Gespielt wird mit Maus und 
 | `main.js` | Renderer, Eingabe, Kamera, Battle-Bus, Spielablauf, Menüs |
 | `map.js` | Karte: Straßen, Gebäude, Kirche, Siedlung, Bauernhof, Insel, Ampeln, Mülltonnen, Natur, Truhen |
 | `terrain.js` | Gelände mit Hügeln, Seen, Fluss und Insel, Sandstrand, Wasseroberfläche |
-| `bus.js` | der Linienbus mit Ballon, Sitzplätzen und Fahrer |
-| `vehicles.js` | fahrbare Autos und Traktor |
+| `bus.js` | der Linienbus (Karosserie, Lackierung, Türen, Innenraum, Fahrer) mit Heißluftballon |
+| `skins.js`, `preview.js` | Skins (Körper, Gesicht, Kleidung) und die 3D-Vorschau im Menü |
+| `cars.js`, `vehicles.js` | Automodelle (Limousine, Kleinwagen, Transporter) und Fahrphysik inkl. Traktor |
 | `post.js`, `grass.js` | Nachbearbeitung (Leuchten, Farbe) und Gras |
 | `pieces.js` | zerstörbare Teile (Instanz-Pools), Bausystem, Bearbeiten |
 | `physics.js` | Kollision (Boxen + Schrägen im Raster), Figurenbewegung, Strahltests |
-| `actors.js` | Figuren: Modell, Animation, Schießen, Spitzhacke, Heilen, Schaden, Schleichen, Rutschen, Schwimmen |
+| `actors.js` | Figuren: Modell mit Gelenken, Animation (Hände per IK), Schießen, Spitzhacke, Heilen, Schaden, Fallschaden, Schleichen, Rutschen, Schwimmen |
 | `bots.js` | Gegner-KI |
 | `items.js`, `inventory.js`, `loot.js` | Waffen/Gegenstände, Inventar, Truhen und Bodenbeute |
 | `zone.js` | Sturm-Zone |
 | `hud.js`, `style.css`, `index.html` | Oberfläche |
 | `fx.js`, `sfx.js`, `textures.js`, `geo.js` | Effekte, Geräusche (WebAudio), Texturen (Canvas), Geometrie-Helfer |
+| `server.py` | Webserver ohne Browser-Cache zum Starten |
 
 Test: `node tests/kampfzone.mjs` (braucht den Webserver auf Port 8123 und Playwright).
 Für Experimente gibt es `index.html?test=1&auto=1&skipbus=1&seed=7&bots=19`.

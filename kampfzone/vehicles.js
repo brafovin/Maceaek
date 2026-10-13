@@ -7,13 +7,26 @@ import { mat4 } from './geo.js';
 import { hurt } from './actors.js';
 import { wrapAngle } from './util.js';
 import { WATER } from './terrain.js';
+import { CAR_MODELS, wheelGeometry, wheelMaterials } from './cars.js';
 
+// Fahrwerte; Autos übernehmen Maße, Radstand und Sitz aus ihrem Modell
+const car = (id, name, o) => {
+  const M = CAR_MODELS[id];
+  return {
+    name, model: id, maxR: 8, brake: 24, cam: 7.5, ...o,
+    hl: M.L / 2, hw: M.w / 2 + 0.03, wz: (M.axles[1] - M.axles[0]) / 2, wx: M.wx, wr: M.wr, axles: M.axles,
+    low: M.cab.yb - 0.02, top: M.cab.yt, seat: M.seat,
+  };
+};
 export const TYPES = {
-  auto:    { name: 'Auto', maxF: 27, maxR: 8, acc: 11, brake: 24, turn: 1.75, hl: 2.1, hw: 0.93, wz: 1.35, wx: 0.86, low: 0.95, top: 1.55, seat: [-0.42, 0.12, 0.25] },
-  traktor: { name: 'Traktor', maxF: 12, maxR: 5, acc: 6, brake: 16, turn: 1.5, hl: 1.7, hw: 0.95, wz: 1.2, wx: 0.85, low: 1.4, top: 2.6, seat: [0, 0.95, 0.75] },
+  limousine:   car('limousine', 'Limousine', { maxF: 31, acc: 11.5, turn: 1.75 }),
+  kleinwagen:  car('kleinwagen', 'Kleinwagen', { maxF: 27, acc: 12.5, turn: 2.0, cam: 7 }),
+  transporter: car('transporter', 'Transporter', { maxF: 25, acc: 8.5, brake: 20, turn: 1.5, cam: 8.6 }),
+  traktor: { name: 'Traktor', maxF: 12, maxR: 5, acc: 6, brake: 16, turn: 1.5, hl: 1.7, hw: 0.95, wz: 1.2, wx: 0.85, low: 1.4, top: 2.6, seat: [0, 0.95, 0.75], cam: 7 },
 };
 
-const _v = new THREE.Vector3();
+const _v = new THREE.Vector3(), _m = new THREE.Matrix4(), _w = new THREE.Matrix4(), _e = new THREE.Euler(), _q = new THREE.Quaternion(), _s = new THREE.Vector3();
+const WHEEL_CAP = 200;
 
 export class Vehicles {
   constructor(G) {
@@ -21,14 +34,53 @@ export class Vehicles {
     this.list = [];
   }
 
-  reset() { this.list = []; }
+  reset() {
+    this.list = [];
+    if (this.wheelMesh) this.wheelMesh.count = 0;
+  }
 
-  // ein vorhandenes Teil (Auto/Traktor) fahrbar machen
-  register(pc, type, x, z, yaw) {
+  // Räder aller Autos als Instanzen (drehen sich beim Fahren, vorne mit Lenkeinschlag)
+  _wheelIdx() {
+    if (!this.wheelMesh) {
+      const m = this.wheelMesh = new THREE.InstancedMesh(wheelGeometry(), wheelMaterials(), WHEEL_CAP);
+      m.count = 0;
+      m.castShadow = m.receiveShadow = true;
+      m.frustumCulled = false;
+      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      this.G.scene.add(m);
+    }
+    const m = this.wheelMesh;
+    if (m.count + 4 > WHEEL_CAP) return -1;
+    m.count += 4;
+    return m.count - 4;
+  }
+
+  _placeWheels(v, carM) {
+    if (v.wheel < 0) return;
+    const T = v.T, m = this.wheelMesh;
+    for (let i = 0; i < 4; i++) {
+      const front = i < 2, s = i % 2 ? 1 : -1;
+      _e.set((s < 0 ? -1 : 1) * v.spin, (front ? v.steer * 0.42 : 0) + (s < 0 ? Math.PI : 0), 0, 'YXZ');
+      _w.compose(_s.set(s * T.wx, T.wr, T.axles[front ? 0 : 1]), _q.setFromEuler(_e), _v.set(T.wr, T.wr, T.wr));
+      m.setMatrixAt(v.wheel + i, _m.multiplyMatrices(carM, _w));
+    }
+    m.instanceMatrix.needsUpdate = true;
+  }
+
+  _hideWheels(v) {
+    if (v.wheel < 0) return;
+    _m.makeScale(0, 0, 0);
+    for (let i = 0; i < 4; i++) this.wheelMesh.setMatrixAt(v.wheel + i, _m);
+    this.wheelMesh.instanceMatrix.needsUpdate = true;
+  }
+
+  // ein vorhandenes Teil (Auto/Traktor) fahrbar machen; model wählt bei Autos das Modell
+  register(pc, type, x, z, yaw, model = type) {
     const v = {
-      pc, type, T: TYPES[type], pos: new THREE.Vector3(x, 0, z), yaw, speed: 0, vy: 0, pitch: 0, roll: 0,
-      driver: null, air: false, steer: 0, crashT: 0, sink: 0, dead: false,
+      pc, type, model, T: TYPES[model], pos: new THREE.Vector3(x, 0, z), yaw, speed: 0, vy: 0, pitch: 0, roll: 0,
+      driver: null, air: false, steer: 0, crashT: 0, sink: 0, dead: false, spin: 0, wheel: -1,
     };
+    if (v.T.wr) v.wheel = this._wheelIdx();
     v.pos.y = this.groundY(v);
     const prev = pc.onDestroy;
     pc.onDestroy = p => { if (prev) prev(p); this.wreck(v); };
@@ -58,6 +110,7 @@ export class Vehicles {
     const p = v.pc.parts[0];
     mat4(v.pos.x, v.pos.y + 0.02, v.pos.z, v.yaw, 1, 1, 1, v.pitch, v.roll, p.m);
     p.pool.setMatrix(p.idx, p.m);
+    this._placeWheels(v, p.m);
     v.pc.center.set(v.pos.x, v.pos.y + 0.8, v.pos.z);
     const W = this.G.world, T = v.T;
     for (const c of v.pc.colliders) W.remove(c);
@@ -74,12 +127,15 @@ export class Vehicles {
     }
   }
 
-  nearest(pos, maxD = 3.4) {
+  // nächstes freies Fahrzeug; Abstand zur Fahrzeugkontur (auch vorn/hinten einsteigen möglich)
+  nearest(pos, maxD = 2.3) {
     let best = null, bd = maxD;
     for (const v of this.list) {
       if (v.dead || v.driver || v.sink > 0) continue;
-      const d = Math.hypot(v.pos.x - pos.x, v.pos.z - pos.z);
-      if (d < bd && Math.abs(v.pos.y - pos.y) < 2.5) { bd = d; best = v; }
+      const dx = pos.x - v.pos.x, dz = pos.z - v.pos.z;
+      const al = Math.abs(dx * -Math.sin(v.yaw) + dz * -Math.cos(v.yaw)), sd = Math.abs(dx * Math.cos(v.yaw) - dz * Math.sin(v.yaw));
+      const d = Math.hypot(Math.max(0, al - v.T.hl), Math.max(0, sd - v.T.hw));
+      if (d < bd && Math.abs(v.pos.y - pos.y) < 2.5) { bd = d; best = v; v.nearD = d; }
     }
     return best;
   }
@@ -129,6 +185,7 @@ export class Vehicles {
   // Fahrzeug zerstört: Fahrer fliegt raus
   wreck(v) {
     v.dead = true;
+    this._hideWheels(v);
     const a = v.driver;
     if (a) {
       this.exit(a);
@@ -174,6 +231,7 @@ export class Vehicles {
       const k = Math.max(-1, Math.min(1, v.speed / 6)) * (1 - Math.min(0.45, Math.abs(v.speed) / 60));
       v.yaw = wrapAngle(v.yaw + v.steer * T.turn * k * dt * (inp && inp.brake ? 1.4 : 1));
     }
+    if (T.wr) v.spin -= v.speed / T.wr * dt;
     // waagerecht bewegen, Hindernisse prüfen
     const fx = -Math.sin(v.yaw), fz = -Math.cos(v.yaw);
     const ox = v.pos.x, oz = v.pos.z;
