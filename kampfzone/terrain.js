@@ -1,5 +1,5 @@
-// Gelände mit Seen, Fluss und Insel: Höhenfunktion für die Physik, Geländenetz mit Sandstrand
-// und eine Wasseroberfläche.
+// Gelände mit sanften Hügeln, Seen, Fluss und Insel: Höhenfunktion für die Physik, Geländenetz mit
+// Sandstrand und eine Wasseroberfläche. Orte und Straßen bleiben flach.
 
 import * as THREE from '../vendor/three.module.js';
 import { HALF } from './util.js';
@@ -19,8 +19,43 @@ export const RIVERS = [
   { pts: [[-166, -52], [-146, -64], [-128, -84], [-108, -104]], w: 4.5 },
 ];
 export const ISLAND = LAKES[0].island;
+export const HILL_MAX = 7;              // höchster Hügel (m)
+
+// flache Bereiche (Orte und Straßen) – dort gibt es keine Hügel
+const FLAT = [
+  [-80, -80, 80, 80],       // Stadt
+  [-152, -44, -86, 68],     // Siedlung
+  [-120, -8, -70, 8],       // Straße West
+  [70, -8, 120, 8],         // Straße Ost
+  [102, -26, 158, 36],      // Bauernhof
+  [90, 88, 126, 124],       // Insel
+];
 
 function smooth(t) { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); }
+
+function hash(i, j) {
+  let h = (i * 374761393 + j * 668265263) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+function vnoise(x, z) {
+  const i = Math.floor(x), j = Math.floor(z), fx = x - i, fz = z - j;
+  const u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
+  const a = hash(i, j) + (hash(i + 1, j) - hash(i, j)) * u;
+  const b = hash(i, j + 1) + (hash(i + 1, j + 1) - hash(i, j + 1)) * u;
+  return a + (b - a) * v;
+}
+function rectDist(x, z, r) {
+  return Math.hypot(Math.max(r[0] - x, 0, x - r[2]), Math.max(r[1] - z, 0, z - r[3]));
+}
+// Hügel: weich ausgeblendet an Orten, Ufern und am Kartenrand
+function hills(x, z, sd) {
+  let m = smooth((sd - 3) / 16) * (1 - smooth((Math.max(Math.abs(x), Math.abs(z)) - 146) / 14));
+  if (m <= 0) return 0;
+  for (const r of FLAT) { m = Math.min(m, smooth(rectDist(x, z, r) / 22)); if (m <= 0) return 0; }
+  const n = vnoise(x / 58 + 3.1, z / 58 - 7.7) * 0.65 + vnoise(x / 24 + 11.3, z / 24 + 2.9) * 0.35;
+  return Math.max(0, n - 0.32) / 0.68 * HILL_MAX * m;
+}
 
 function segDist(x, z, ax, az, bx, bz) {
   const dx = bx - ax, dz = bz - az;
@@ -45,6 +80,7 @@ function sample(x, z) {
     sd = Math.min(sd, d);
     if (d < 0) h = Math.min(h, -2.6 * smooth(-d / 4));
   }
+  if (h === 0) h = hills(x, z, sd);
   return [h, sd];
 }
 
@@ -125,7 +161,7 @@ export function buildTerrain(G, grass) {
   // Wasseroberfläche
   if (!normals) normals = waterNormals();
   const water = new THREE.Mesh(new THREE.PlaneGeometry(2 * E, 2 * E).rotateX(-Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: 0x2c7bb0, transparent: true, opacity: 0.8, roughness: 0.06, metalness: 0.1, normalMap: normals, normalScale: new THREE.Vector2(0.35, 0.35), depthWrite: false }));
+    new THREE.MeshStandardMaterial({ color: 0x1f6a9a, transparent: true, opacity: 0.82, roughness: 0.03, metalness: 0.0, envMapIntensity: 1.4, normalMap: normals, normalScale: new THREE.Vector2(0.3, 0.3), depthWrite: false }));
   water.position.y = WATER;
   water.renderOrder = 2;
   G.mapGroup.add(water);

@@ -168,11 +168,25 @@ export class Hud {
     const ch = $('crosshair');
     ch.style.setProperty('--gap', Math.min(80, px).toFixed(1) + 'px');
     ch.dataset.mode = G.buildMode || G.editing ? 'build' : cur === 'pickaxe' ? 'pick' : W && W.pellets ? 'shotgun' : 'gun';
-    ch.hidden = !!G.scoped || !p.alive || p.state === 'bus';
+    ch.hidden = !!G.scoped || !p.alive || p.state === 'bus' || p.state === 'car';
     $('scope').hidden = !G.scoped;
     // Aufforderung (E)
     const pr = $('prompt');
-    if (G.interact && p.alive) {
+    // Fahrzeug
+    const v = p.state === 'car' ? p.vehicle : null;
+    $('carHud').hidden = !v;
+    if (v) {
+      $('carSpeed').textContent = Math.round(Math.abs(v.speed) * 3.6);
+      $('carHp').style.width = Math.max(0, 100 * v.pc.hp / v.pc.maxHp) + '%';
+      $('carName').textContent = v.T.name;
+    }
+    if (v && p.alive) {
+      pr.innerHTML = '<kbd>W</kbd><kbd>S</kbd> Gas/Bremse · <kbd>A</kbd><kbd>D</kbd> Lenken · <kbd>Leertaste</kbd> Handbremse · <kbd>H</kbd> Hupe · <kbd>E</kbd> Aussteigen';
+      pr.hidden = false;
+    } else if (G.carNear && p.alive && !(G.interact && G.interactD <= G.carNearD)) {
+      pr.innerHTML = `<kbd>E</kbd> Einsteigen: <b>${G.carNear.T.name}</b>`;
+      pr.hidden = false;
+    } else if (G.interact && p.alive) {
       const t = G.interact;
       if (t.chest) pr.innerHTML = '<kbd>E</kbd> Truhe öffnen';
       else {

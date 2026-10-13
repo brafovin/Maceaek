@@ -22,6 +22,7 @@ export class World {
     this.hit = { t: 0, c: null, nx: 0, ny: 0, nz: 0, x: 0, y: 0, z: 0 };
     this.terrain = null;      // Höhenfunktion (x, z) → y; ohne: flach bei 0
     this.water = -Infinity;   // Wasserspiegel
+    this.hillTop = 6;         // höchster Geländepunkt (für Strahltests)
   }
 
   clear() { for (const c of this.cells) c.length = 0; }
@@ -115,22 +116,50 @@ export class World {
     return true;
   }
 
+  // Strahl gegen das Gelände (Höhenfeld inkl. Wasseroberfläche): schrittweise abtasten, dann halbieren
+  _rayTerrain(ox, oy, oz, dx, dy, dz, maxT) {
+    const top = this.hillTop;
+    let t0 = 0, t1 = maxT;
+    if (oy > top) { if (dy >= -1e-9) return null; t0 = (oy - top) / -dy; }
+    if (dy > 1e-9) t1 = Math.min(t1, (top - oy) / dy);
+    if (t0 >= t1) return null;
+    const H = (x, z) => Math.max(this.terrain(x, z), this.water);
+    let t = t0, prevT = t0;
+    let prevD = oy + dy * t - H(ox + dx * t, oz + dz * t);
+    if (prevD < 0) return null;                       // Start unter dem Boden → ignorieren
+    const slope = 0.7 + Math.max(0, -dy);
+    for (let it = 0; it < 400 && t < t1; it++) {
+      t = Math.min(t + Math.min(8, Math.max(0.35, prevD / slope)), t1);
+      const d = oy + dy * t - H(ox + dx * t, oz + dz * t);
+      if (d <= 0) {
+        let a = prevT, b = t;
+        for (let i = 0; i < 7; i++) { const m = (a + b) / 2; if (oy + dy * m - H(ox + dx * m, oz + dz * m) > 0) a = m; else b = m; }
+        const x = ox + dx * b, z = oz + dz * b, th = this.terrain(x, z);
+        const r = this._tr || (this._tr = {});
+        r.t = b; r.water = th < this.water;
+        if (r.water) { r.nx = 0; r.ny = 1; r.nz = 0; }
+        else {
+          const gx = this.terrain(x - 0.5, z) - this.terrain(x + 0.5, z), gz = this.terrain(x, z - 0.5) - this.terrain(x, z + 0.5);
+          const l = Math.hypot(gx, 1, gz);
+          r.nx = gx / l; r.ny = 1 / l; r.nz = gz / l;
+        }
+        return r;
+      }
+      prevT = t; prevD = d;
+    }
+    return null;
+  }
+
   // Strahl (Richtung normiert). skip: Funktion(collider) → true = ignorieren. Liefert this.hit oder null.
   raycast(ox, oy, oz, dx, dy, dz, maxT, skip = null, withGround = true) {
     const st = ++this.stamp;
     let best = maxT, bc = null, bnx = 0, bny = 0, bnz = 0;
-    if (withGround && dy < -1e-9) {
-      let t = -oy / dy, gc = GROUND;
-      if (this.terrain && t >= 0) {
-        // Seen und Ufer: Wasseroberfläche bzw. Böschung statt der Ebene y = 0
-        const h = this.terrain(ox + dx * t, oz + dz * t);
-        if (h < -0.02) {
-          const y = Math.max(h, this.water);
-          t = (y - oy) / dy;
-          if (h < this.water) gc = WATERHIT;
-        }
-      }
-      if (t >= 0 && t < best) { best = t; bc = gc; bnx = 0; bny = 1; bnz = 0; }
+    if (withGround && this.terrain) {
+      const g = this._rayTerrain(ox, oy, oz, dx, dy, dz, best);
+      if (g) { best = g.t; bc = g.water ? WATERHIT : GROUND; bnx = g.nx; bny = g.ny; bnz = g.nz; }
+    } else if (withGround && dy < -1e-9) {
+      const t = -oy / dy;
+      if (t >= 0 && t < best) { best = t; bc = GROUND; bnx = 0; bny = 1; bnz = 0; }
     }
     let gx = Math.floor((ox + OFF) / CS), gz = Math.floor((oz + OFF) / CS);
     const sx = dx > 0 ? 1 : -1, sz = dz > 0 ? 1 : -1;

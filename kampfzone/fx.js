@@ -15,10 +15,14 @@ void main() {
 }`;
 const FS_SOFT = `
 uniform sampler2D map; varying vec3 vC; varying float vA;
-void main() { float a = texture2D(map, gl_PointCoord).a * vA; if (a < 0.01) discard; gl_FragColor = vec4(vC * a, a); }`;
+void main() { float a = texture2D(map, gl_PointCoord).a * vA; if (a < 0.01) discard; gl_FragColor = vec4(vC * a, a);
+  #include <colorspace_fragment>
+}`;
 const FS_HARD = `
 varying vec3 vC; varying float vA;
-void main() { if (vA < 0.02) discard; gl_FragColor = vec4(vC, 1.0); }`;
+void main() { if (vA < 0.02) discard; gl_FragColor = vec4(vC, 1.0);
+  #include <colorspace_fragment>
+}`;
 
 class Particles {
   constructor(scene, n, { soft, map }) {

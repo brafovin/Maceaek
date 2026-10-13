@@ -225,8 +225,8 @@ export function rayActors(G, o, d, maxT, skip) {
     const px = cx - d.x * along, py = cy - d.y * along, pz = cz - d.z * along;
     if (px * px + py * py + pz * pz > 2.2 * 2.2) continue;
     // Kopf
-    const low = t.low && !t.swimming;
-    const hx = t.pos.x - o.x, hy = t.pos.y + (low ? 1.22 : 1.72) - o.y, hz = t.pos.z - o.z;
+    const low = t.low && !t.swimming, seated = t.state === 'car';
+    const hx = t.pos.x - o.x, hy = t.pos.y + (seated ? 1.15 : low ? 1.22 : 1.72) - o.y, hz = t.pos.z - o.z;
     const b = hx * d.x + hy * d.y + hz * d.z;
     const c = hx * hx + hy * hy + hz * hz - 0.25 * 0.25;
     const disc = b * b - c;
@@ -235,7 +235,7 @@ export function rayActors(G, o, d, maxT, skip) {
       if (th > 0 && th < best) { best = th; ba = t; head = true; }
     }
     // Körper
-    const tb = rayBox(o, d, t.pos.x - 0.33, t.pos.y + (t.swimming ? 1.0 : 0), t.pos.z - 0.33, t.pos.x + 0.33, t.pos.y + (low ? 1.05 : 1.52), t.pos.z + 0.33);
+    const tb = rayBox(o, d, t.pos.x - 0.33, t.pos.y + (t.swimming ? 1.0 : seated ? 0.35 : 0), t.pos.z - 0.33, t.pos.x + 0.33, t.pos.y + (seated ? 0.95 : low ? 1.05 : 1.52), t.pos.z + 0.33);
     if (tb > 0 && tb < best) { best = tb; ba = t; head = false; }
   }
   return ba ? { a: ba, t: best, head } : null;
@@ -400,6 +400,7 @@ export function hurt(G, t, amount, src, o = {}) {
 }
 
 export function kill(G, t, src, o = {}) {
+  if (t.vehicle) { t.vehicle.driver = null; t.vehicle = null; t.state = 'ground'; }
   t.alive = false;
   t.deadT = 0;
   t.vel.set(0, 0, 0);
@@ -422,6 +423,17 @@ function approach(v, tx, tz, acc) {
   const dx = tx - v.x, dz = tz - v.z, l = Math.hypot(dx, dz);
   if (l <= acc) { v.x = tx; v.z = tz; }
   else { v.x += (dx / l) * acc; v.z += (dz / l) * acc; }
+}
+
+// Fallschaden: ab ca. 4,7 m Fallhöhe, ab ca. 25 m tödlich
+export const FALL_SAFE = 15;
+function fallDamage(G, a, v) {
+  const dmg = Math.round((v - FALL_SAFE) * 5.2);
+  if (dmg <= 0) return;
+  G.sfx.at('fallhurt', a.pos, a.isPlayer ? 1 : 0.6);
+  G.fx.debris(_e.set(a.pos.x, a.pos.y + 0.1, a.pos.z), 0x8a7a5a, 8);
+  if (a.isPlayer) { G.hud.notice(`Fallschaden −${dmg}`, 'warn', 1.6); G.shake = Math.min(1, dmg / 40); }
+  hurt(G, a, dmg, null, { fall: true, weapon: 'Sturz' });
 }
 
 // Ducken umschalten; beim Sprinten wird daraus eine Rutschpartie
@@ -462,6 +474,7 @@ export function stepActor(G, a, wx, wz, jump, dt) {
   const W = G.world;
   if (!a.alive) return;
   if (a.state === 'bus') { G.seatPos(a, a.pos); a.vel.set(0, 0, 0); return; }
+  if (a.state === 'car') { a.vel.set(0, 0, 0); return; }
   if (a.state === 'fall') {
     approach(a.vel, wx, wz, 22 * dt);
     const term = a.dive ? -44 : -26;
@@ -520,7 +533,7 @@ export function stepActor(G, a, wx, wz, jump, dt) {
       if (!wasSwim && a.vel.y < -4) splash(G, a);
     } else if (th < WATER) a.wading = a.pos.y < WATER - 0.2;
   }
-  if (a.landSpeed > 19) hurt(G, a, (a.landSpeed - 19) * 6, null, { fall: true, weapon: 'Sturz' });
+  if (a.landSpeed > FALL_SAFE) fallDamage(G, a, a.landSpeed);
   else if (a.landSpeed > 9 && a.isPlayer) G.sfx.play('land');
   // Schritte (geduckt lautlos)
   const hs = Math.hypot(a.vel.x, a.vel.z);
@@ -538,7 +551,7 @@ export function stepActor(G, a, wx, wz, jump, dt) {
 export function animate(G, a, dt) {
   const m = a.model;
   m.root.position.copy(a.pos);
-  m.root.rotation.y = a.state === 'bus' ? G.bus.yaw : a.yaw;
+  m.root.rotation.y = a.state === 'bus' ? G.bus.yaw : a.state === 'car' && a.vehicle ? a.vehicle.yaw : a.yaw;
   if (!a.alive) {
     a.deadT += dt;
     m.root.rotation.x = Math.min(1.45, a.deadT * 4);
@@ -549,7 +562,7 @@ export function animate(G, a, dt) {
   }
   m.root.visible = !(a.isPlayer && G.hidePlayer);
   m.root.rotation.x = 0;
-  m.root.scale.setScalar(a.state === 'bus' ? 0.86 : 1);
+  m.root.scale.setScalar(a.state === 'bus' ? 0.86 : a.state === 'car' ? 0.9 : 1);
   m.glider.visible = a.state === 'glide';
   const it = current(a.inv);
   // gehaltener Gegenstand
@@ -563,6 +576,16 @@ export function animate(G, a, dt) {
   const hs = Math.hypot(a.vel.x, a.vel.z);
   const k = 1 - Math.exp(-dt * 14);
   const bodyTo = (y, rx) => { m.body.position.y += (y - m.body.position.y) * k; m.body.rotation.x += (rx - m.body.rotation.x) * k; };
+  if (a.state === 'car') {
+    // am Steuer
+    m.body.position.y = -0.44; m.body.rotation.x = 0;
+    m.legL.rotation.set(-1.35, 0, 0.06); m.legR.rotation.set(-1.35, 0, -0.06);
+    const st = a.vehicle ? a.vehicle.steer * 0.3 : 0;
+    m.armL.rotation.set(1.15, 0, 0.25 + st); m.armR.rotation.set(1.15, 0, -0.25 + st);
+    m.head.rotation.x = 0;
+    m.holder.visible = false; m.pick.visible = false;
+    return;
+  }
   if (a.state === 'bus') {
     // sitzen
     m.body.position.y = -0.44; m.body.rotation.x = 0;
