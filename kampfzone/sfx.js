@@ -34,6 +34,28 @@ export class Sfx {
   setVolume(v) { this.volume = v; if (this.master) this.master.gain.value = this.muted ? 0 : v; }
   setMuted(m) { this.muted = m; if (this.master) this.master.gain.value = m ? 0 : this.volume; }
 
+  // Motorgeräusch des eigenen Fahrzeugs: level 0..1 (Drehzahl), negativ = aus
+  engine(level) {
+    if (!this.ctx) return;
+    if (!this.eng) {
+      if (level < 0) return;
+      const c = this.ctx;
+      const o1 = c.createOscillator(), o2 = c.createOscillator(), f = c.createBiquadFilter(), g = c.createGain();
+      o1.type = 'sawtooth'; o2.type = 'square';
+      f.type = 'lowpass'; f.frequency.value = 600;
+      g.gain.value = 0;
+      o1.connect(f); o2.connect(f); f.connect(g).connect(this.master);
+      o1.start(); o2.start();
+      this.eng = { o1, o2, f, g };
+    }
+    const e = this.eng, t = this.ctx.currentTime, on = level >= 0;
+    const r = Math.max(0, level);
+    e.o1.frequency.setTargetAtTime(38 + r * 95, t, 0.08);
+    e.o2.frequency.setTargetAtTime(19 + r * 48, t, 0.08);
+    e.f.frequency.setTargetAtTime(380 + r * 1300, t, 0.1);
+    e.g.gain.setTargetAtTime(on ? 0.07 + r * 0.07 : 0, t, 0.12);
+  }
+
   storm(level) {
     if (!this.ctx) return;
     this.stormGain.gain.setTargetAtTime(level * 0.5, this.ctx.currentTime, 0.3);
@@ -146,6 +168,10 @@ export class Sfx {
       case 'win': [523, 659, 784, 1047, 784, 1047].forEach((f, i) => this._tone(o, { t: i * 0.13, dur: 0.3, type: 'triangle', f, vol: 0.3 })); break;
       case 'lose': [392, 330, 262].forEach((f, i) => this._tone(o, { t: i * 0.25, dur: 0.4, type: 'triangle', f, vol: 0.3 })); break;
       case 'click': this._tone(o, { dur: 0.03, type: 'square', f: 1200, vol: 0.1 }); break;
+      case 'carhorn': this._tone(o, { dur: 0.45, type: 'square', f: 392, vol: 0.12 }); this._tone(o, { dur: 0.45, type: 'square', f: 494, vol: 0.1 }); break;
+      case 'crash': this._noise(o, { dur: 0.45, type: 'bandpass', f: 1800, f2: 500, q: 0.8, vol: 0.9 }); this._tone(o, { dur: 0.3, f: 90, f2: 45, vol: 0.6 }); for (const f of [700, 1450]) this._tone(o, { dur: 0.35, f, vol: 0.12 }); break;
+      case 'door': this._noise(o, { dur: 0.08, type: 'lowpass', f: 900, vol: 0.5 }); this._tone(o, { t: 0.02, dur: 0.06, type: 'square', f: 180, vol: 0.12 }); break;
+      case 'fallhurt': this._noise(o, { dur: 0.25, type: 'lowpass', f: 600, f2: 150, vol: 1 }); this._tone(o, { dur: 0.2, type: 'sawtooth', f: 140, f2: 70, vol: 0.25 }); break;
       case 'step': this._noise(o, { dur: 0.07, type: 'bandpass', f: 380 + Math.random() * 200, q: 1.2, vol: 0.5 }); break;
       case 'wade': this._noise(o, { dur: 0.22, type: 'bandpass', f: 900 + Math.random() * 400, q: 0.8, vol: 0.35, attack: 0.03 }); break;
       case 'swim': this._noise(o, { dur: 0.35, type: 'lowpass', f: 700, f2: 300, vol: 0.4, attack: 0.08 }); break;

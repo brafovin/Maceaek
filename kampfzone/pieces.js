@@ -121,7 +121,8 @@ export class Pieces {
     return this.pool(`c-wall-${style}-${variant}`, () => {
       const edge = this._std('edge-' + style, { color: S.edge });
       const extTex = variant === 'window' ? tx[S.win] : variant === 'winlow' ? tx[S.low] : tx[S.ext];
-      const ext = this._std(`ext-${style}-${variant}`, { map: extTex });
+      const glossy = style === 'office' && variant === 'window';
+      const ext = this._std(`ext-${style}-${variant}`, { map: extTex, roughness: glossy ? 0.18 : 0.85, metalness: glossy ? 0.35 : 0 });
       const int = this._std(`int-${style}`, { map: tx[S.int] });
       const geoV = variant === 'door' || variant === 'bigdoor' ? variant : 'solid';
       return { geo: wallGeo(geoV), mat: [edge, edge, edge, edge, ext, int], cap: 700 };

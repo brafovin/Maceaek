@@ -7,7 +7,7 @@ import { merge, boxAt, mat4 } from './geo.js';
 import { STYLES } from './pieces.js';
 import { floorLoot } from './items.js';
 import { GRID, HALF } from './util.js';
-import { buildTerrain, terrainH, shoreDist, WATER, LAKES, ISLAND } from './terrain.js';
+import { buildTerrain, terrainH, shoreDist, WATER, LAKES, ISLAND, HILL_MAX } from './terrain.js';
 
 export const ROADS = [-64, 0, 64];
 export const CITY = 72;
@@ -43,7 +43,7 @@ const SUBURB = [
 // Bauernhof im Osten
 const FARM = [
   { x0: 116, z0: -12, w: 3, d: 2, floors: 2, style: 'plaster', door: '+z', roof: true },
-  { x0: 120, z0: 8,   w: 4, d: 3, floors: 2, style: 'wood',    door: '-z', roof: true, tint: 0xd8705e },
+  { x0: 120, z0: 8,   w: 4, d: 3, floors: 2, style: 'wood',    door: '-z', roof: true, tint: 0xff9a82 },
 ];
 
 // Fischerhütte auf der Insel
@@ -225,6 +225,7 @@ export function buildMap(G) {
   buildTerrain(G, tx.grass);
   W.terrain = terrainH;
   W.water = WATER;
+  W.hillTop = HILL_MAX + 0.5;
   G.boats = [];
   G.beams = [];
 
@@ -362,11 +363,13 @@ export function buildMap(G) {
 
   // --- Natur ---
   const NG = natureGeos();
+  // Bäume, Büsche und Schilf wiegen sich im Wind
+  const vwind = P.mats.vwind || (P.mats.vwind = windMaterial(G));
   const npool = {
-    pine: P.pool('n-pine', () => ({ geo: NG.pine, mat: vflat, cap: 420 })),
-    oak: P.pool('n-oak', () => ({ geo: NG.oak, mat: vflat, cap: 260 })),
+    pine: P.pool('n-pine', () => ({ geo: NG.pine, mat: vwind, cap: 420 })),
+    oak: P.pool('n-oak', () => ({ geo: NG.oak, mat: vwind, cap: 260 })),
     rocks: NG.rocks.map((g, i) => P.pool('n-rock' + i, () => ({ geo: g, mat: vflat, cap: 60 }))),
-    bush: P.pool('n-bush', () => ({ geo: NG.bush, mat: vflat, cap: 140, shadow: false })),
+    bush: P.pool('n-bush', () => ({ geo: NG.bush, mat: vwind, cap: 140, shadow: false })),
   };
   const trees = [];
   const freeAt = (x, z, r) => {
@@ -415,11 +418,11 @@ export function buildMap(G) {
   for (let i = 0; i < 300 && i < 1000; i++) {
     const x = rng.range(-155, 155), z = rng.range(-155, 155);
     if (!freeAt(x, z, 1.2)) continue;
-    npool.bush.add(mat4(x, 0, z, rng() * 6, 0.8 + rng() * 0.6), [0.85 + rng() * 0.3, 0.9 + rng() * 0.2, 0.85]);
+    npool.bush.add(mat4(x, terrainH(x, z) - 0.1, z, rng() * 6, 0.8 + rng() * 0.6), [0.85 + rng() * 0.3, 0.9 + rng() * 0.2, 0.85]);
     if (npool.bush.n >= 120) break;
   }
   // Schilf an den Seeufern (Deko)
-  const reeds = P.pool('n-reed', () => ({ geo: NG.reed, mat: vflat, cap: 160, shadow: false }));
+  const reeds = P.pool('n-reed', () => ({ geo: NG.reed, mat: vwind, cap: 160, shadow: false }));
   for (const Lk of LAKES) {
     const n = Math.round(Lk.r * 1.3);
     for (let i = 0; i < n; i++) {
@@ -444,13 +447,13 @@ export function buildMap(G) {
     const a = rng() * Math.PI * 2;
     const x = t[0] + Math.cos(a) * (t[2] + 0.6), z = t[1] + Math.sin(a) * (t[2] + 0.6);
     if (Math.abs(x) > HALF - 6 || Math.abs(z) > HALF - 6 || shoreDist(x, z) < 2) continue;
-    chestSpots.push([x, 0, z, Math.atan2(t[0] - x, t[1] - z) + Math.PI]);
+    chestSpots.push([x, terrainH(x, z), z, Math.atan2(t[0] - x, t[1] - z) + Math.PI]);
   }
   // Bodenbeute (schlechte Waffen) – mehr Plätze
   for (let i = 0; i < 600 && lootSpots.length < 95; i++) {
     const x = rng.range(-150, 150), z = rng.range(-150, 150);
     if (!freeAt(x, z, 1.5)) continue;
-    lootSpots.push([x, 0, z]);
+    lootSpots.push([x, terrainH(x, z), z]);
   }
   for (const [x, y, z, yaw] of chestSpots) L.addChest(x, y, z, Math.round(yaw / (Math.PI / 2)) * (Math.PI / 2));
   for (const [x, y, z] of lootSpots) {
@@ -467,6 +470,13 @@ export function buildMap(G) {
 
   info.chests = chestSpots.map(c => [c[0], c[2]]);
   info.roads = [[-114, -4, -68, 4], [-122, -36, -114, 60], [68, -4, 114, 4]];
+  // wo Gras wachsen darf: nicht in der Stadt, auf Straßen, in Häusern, am Strand oder im Wasser
+  const noGrass = [[-74, -74, 74, 74], [139, 11, 145, 17], ...info.roads.map(r => [r[0] - 1, r[1] - 1, r[2] + 1, r[3] + 1]),
+    ...info.buildings.map(b => [b[0] - 0.5, b[1] - 0.5, b[2] + 0.5, b[3] + 0.5])];
+  G.grassOK = (x, z) => {
+    for (const r of noGrass) if (x > r[0] && x < r[2] && z > r[1] && z < r[3]) return false;
+    return shoreDist(x, z) > 2.5;
+  };
   return info;
 }
 
@@ -705,12 +715,13 @@ function streetLamp(G, pools, x, z, yaw) {
 function car(G, pools, x, z, yaw, color) {
   const along = Math.abs(Math.sin(yaw)) > 0.5;   // Längsachse entlang x
   const hx = along ? 2.1 : 0.93, hz = along ? 0.93 : 2.1;
-  G.pieces.create({
+  const pc = G.pieces.create({
     kind: 'prop', name: 'Auto', hp: 450, yieldMat: 'metall', yieldHit: 10, bonus: 15, debris: color, sound: 'metall',
     parts: [{ pool: pools.car, m: mat4(x, 0.02, z, yaw), color }],
     boxes: [[x - hx, 0, z - hz, x + hx, 0.95, z + hz], [x - hx * 0.55, 0.95, z - hz * 0.8, x + hx * 0.55, 1.55, z + hz * 0.8]],
     center: new THREE.Vector3(x, 0.8, z),
   });
+  G.vehicles.register(pc, 'auto', x, z, yaw);      // fahrbar (E)
 }
 
 function bench(G, pools, x, z, yaw) {
@@ -758,12 +769,12 @@ function fountain(G, x, z) {
 function tree(G, npool, x, z, kind, rng) {
   const s = 0.85 + rng() * 0.45;
   const tint = [0.85 + rng() * 0.25, 0.85 + rng() * 0.25, 0.85 + rng() * 0.15];
-  const tr = 0.35 * s;
+  const tr = 0.35 * s, y = terrainH(x, z) - 0.15;
   G.pieces.create({
     kind: 'tree', name: kind === 'pine' ? 'Tanne' : 'Laubbaum', hp: 260, yieldMat: 'holz', yieldHit: 8, bonus: 12, nature: true,
     debris: 0x3f7a3a, sound: 'holz',
-    parts: [{ pool: npool[kind], m: mat4(x, 0, z, rng() * 6, s), color: tint }],
-    boxes: [[x - tr, 0, z - tr, x + tr, 6 * s, z + tr]], center: new THREE.Vector3(x, 2, z),
+    parts: [{ pool: npool[kind], m: mat4(x, y, z, rng() * 6, s), color: tint }],
+    boxes: [[x - tr, y, z - tr, x + tr, y + 6 * s, z + tr]], center: new THREE.Vector3(x, y + 2, z),
   });
 }
 
@@ -771,11 +782,11 @@ function rock(G, npool, x, z, rng) {
   const sx = 1.4 + rng() * 1.3, sy = 1.0 + rng() * 0.9, sz = 1.4 + rng() * 1.3;
   const v = Math.floor(rng() * 3);
   const r = Math.max(sx, sz) * 0.72;
-  const g = 0.85 + rng() * 0.25;
+  const g = 0.85 + rng() * 0.25, y = terrainH(x, z) - 0.2;
   G.pieces.create({
     kind: 'rock', name: 'Fels', hp: 380, yieldMat: 'stein', yieldHit: 7, bonus: 10, nature: true, debris: 0x8f8c86, sound: 'stein',
-    parts: [{ pool: npool.rocks[v], m: mat4(x, 0, z, rng() * 6, sx, sy, sz), color: [g, g, g] }],
-    boxes: [[x - r, 0, z - r, x + r, (0.35 + 0.75) * sy * 0.95, z + r]], center: new THREE.Vector3(x, 0.8 * sy, z),
+    parts: [{ pool: npool.rocks[v], m: mat4(x, y, z, rng() * 6, sx, sy, sz), color: [g, g, g] }],
+    boxes: [[x - r, y, z - r, x + r, y + (0.35 + 0.75) * sy * 0.95, z + r]], center: new THREE.Vector3(x, y + 0.8 * sy, z),
   });
 }
 
@@ -836,6 +847,7 @@ function suburbProps(G, pools) {
   }
   for (const z of [-24, 8, 36, 54]) streetLamp(G, pools, -123.2, z, Math.PI / 2);
   for (const [z, yaw, col] of [[-6.5, 0, 0x2e86de], [24, Math.PI, 0xc0392b], [46, 0, 0x7f8c8d]]) car(G, pools, -115.8, z, yaw, col);
+  car(G, pools, -100, 0, Math.PI / 2, 0xf1c40f);           // an der Landstraße
 }
 
 // ---------- Bauernhof ----------
@@ -853,11 +865,13 @@ function farmProps(G, pools, chestSpots, lootSpots) {
       parts: [{ pool: pools.hay, m: mat4(x, 0, z, yaw) }], boxes: [[x - 0.75, 0, z - 0.75, x + 0.75, 1.5, z + 0.75]], center: new THREE.Vector3(x, 0.75, z),
     });
   }
-  G.pieces.create({
+  const tractor = G.pieces.create({
     kind: 'prop', name: 'Traktor', hp: 400, yieldMat: 'metall', yieldHit: 10, bonus: 15, debris: 0x2f8a3a, sound: 'metall',
     parts: [{ pool: pools.tractor, m: mat4(126, 0, 1, Math.PI / 2) }],
     boxes: [[124.4, 0, 0.3, 127.6, 1.4, 1.7], [125.2, 1.4, 0.4, 126.8, 2.6, 1.6]], center: new THREE.Vector3(126, 1, 1),
   });
+  G.vehicles.register(tractor, 'traktor', 126, 1, Math.PI / 2);
+  car(G, pools, 141, 0.5, -Math.PI / 2, 0x8e44ad);        // Auto auf dem Hof
   for (let x = 114; x < 150; x += 4) fence(G, pools, x, -18, 0);
   for (let z = -16; z < 32; z += 4) if (z < -6 || z > 6) fence(G, pools, 150, z, Math.PI / 2);
   chestSpots.push([136, 0, -7, Math.PI], [145.5, 0, 18, -Math.PI / 2]);
@@ -929,4 +943,23 @@ function island(G, chestSpots, lootSpots) {
   // Beute auf der Insel
   chestSpots.push([LX, 0, LZ + 3.4, 0], [DX0 + 1.5, 0.35, DZ, -Math.PI / 2]);
   lootSpots.push([ISLAND.x - 6, 0, ISLAND.z - 5], [ISLAND.x + 2, 0, ISLAND.z + 10]);
+}
+
+// Material mit Windbewegung (für instanzierte Bäume, Büsche, Schilf); G.wind.value = Zeit
+function windMaterial(G) {
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true });
+  m.onBeforeCompile = sh => {
+    sh.uniforms.uWind = G.wind;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uWind;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        #ifdef USE_INSTANCING
+          vec3 ip = instanceMatrix[3].xyz;
+          float hgt = max(0.0, position.y - 1.6);
+          float w = sin(uWind * 1.3 + ip.x * 0.21 + ip.z * 0.17) * 0.032 + sin(uWind * 2.9 + ip.x * 0.7) * 0.01;
+          transformed.x += w * hgt; transformed.z += w * 0.6 * hgt;
+        #endif`);
+  };
+  m.customProgramCacheKey = () => 'wind';
+  return m;
 }

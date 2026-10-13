@@ -99,6 +99,26 @@ const res = await page.evaluate(() => {
   // Bodenbeute: nur schwache Waffen
   const floorW = G.loot.pickups.filter(q => q.floor && q.item.k === 'w');
   out.floorWeaponsBad = floorW.length > 20 && floorW.every(q => q.item.r <= 1 && !['scharfschuetze', 'raketenwerfer'].includes(q.item.id));
+  // Fallschaden: 12 m tief fallen
+  p.hp = 100; p.shield = 0;
+  G.debug.tp(30, 12, -100); G.debug.step(120);
+  out.fallDamage = 100 - p.hp;
+  p.hp = 100;
+  // Auto fahren: einsteigen, Gas geben, aussteigen; dabei einen Bot überfahren
+  const car = G.vehicles.list.find(v => v.type === 'auto');
+  car.pos.set(80, 0, 0); car.yaw = -Math.PI / 2; car.speed = 0; G.vehicles.place(car);
+  G.debug.tp(80, 0.05, 2.6); G.debug.step(3);
+  key('KeyE'); G.debug.step(2);
+  out.inCar = p.state === 'car';
+  const victim = G.bots.find(b => b.alive);
+  victim.pos.set(100, 0.05, 0); victim.vel.set(0, 0, 0); victim.state = 'ground';
+  const hpVictim = victim.hp;
+  G.keys.KeyW = true; G.debug.step(120); G.keys.KeyW = false;
+  out.carSpeed = +(car.speed * 3.6).toFixed(0);
+  out.runOver = victim.hp < hpVictim || !victim.alive;
+  G.keys.Space = true; G.debug.step(120); G.keys.Space = false;
+  key('KeyE'); G.debug.step(20);
+  out.exited = p.state === 'ground';
   // Runde mit Bots im Zeitraffer
   G.bots.forEach((b, i) => { b.brain.update = bots[i]; });
   G.debug.tp(0, 0.2, -6);
@@ -127,6 +147,11 @@ const checks = [
   ['Wand bearbeitet (Tür)', res.editMask === 0b10010],
   ['durch die Tür gelaufen', res.throughDoor],
   ['Bodenbeute nur schwach', res.floorWeaponsBad],
+  ['Fallschaden aus 12 m', res.fallDamage > 20 && res.fallDamage < 60],
+  ['ins Auto eingestiegen', res.inCar],
+  ['Auto fährt (> 60 km/h)', res.carSpeed > 60],
+  ['Bot überfahren', res.runOver],
+  ['ausgestiegen', res.exited],
   ['Runde endet (≤ 1 übrig)', res.alive <= 1],
   ['keine Fehler', errors.length === 0],
 ];

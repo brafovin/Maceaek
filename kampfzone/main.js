@@ -15,9 +15,12 @@ import { WATER, updateWater } from './terrain.js';
 import { Brain, BOT_NAMES } from './bots.js';
 import { current, give } from './inventory.js';
 import { WEAPONS, itemName, makeWeapon } from './items.js';
-import { makeRng, forward, clamp, fmtTime, HALF } from './util.js';
+import { makeRng, forward, clamp, fmtTime, HALF, wrapAngle } from './util.js';
 import { merge } from './geo.js';
 import { makeBus, SEATS } from './bus.js';
+import { Vehicles } from './vehicles.js';
+import { Post } from './post.js';
+import { Grass } from './grass.js';
 
 const params = new URLSearchParams(location.search);
 const TEST = params.has('test');
@@ -28,6 +31,7 @@ const $ = id => document.getElementById(id);
 const SETTINGS_KEY = 'kampfzone.settings';
 function loadSettings() {
   const def = { sens: 1, vol: 0.7, shadows: true, quality: 'hoch', bots: 19, diff: 'normal' };
+  // Grafikstufen: ultra | hoch | niedrig
   try { return { ...def, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; } catch { return def; }
 }
 function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(G.settings)); } catch { /* egal */ } }
@@ -39,7 +43,16 @@ const G = {
   camYaw: 0, camPitch: 0, camY: 0, aiming: false, scoped: false, hidePlayer: false,
   interact: null, bigMap: false, fireQueued: false, stats: { dmg: 0 },
   editing: null, editHint: null,
+  wind: { value: 0 }, shake: 0,
 };
+
+// Grafikstufen: Pixeldichte, Nachbearbeitung (Leuchten, Farbe), Schattenauflösung, Gras
+const QUALITY = {
+  ultra:   { pr: 2,   post: true,  shadow: 4096, grass: [16000, 40] },
+  hoch:    { pr: 1.5, post: true,  shadow: 2048, grass: [9000, 32] },
+  niedrig: { pr: 1,   post: false, shadow: 1024, grass: null },
+};
+const Q = () => QUALITY[G.settings.quality] || QUALITY.hoch;
 window.KZ = G;
 
 // ---------- Renderer und Szene ----------
@@ -66,34 +79,51 @@ camera.rotation.order = 'YXZ';
 G.scene = scene; G.camera = camera; G.renderer = renderer;
 
 // Himmel mit Farbverlauf und Sonne
-const SUN = new THREE.Vector3(0.45, 0.8, 0.35).normalize();
-const sky = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), new THREE.ShaderMaterial({
+const SUN = new THREE.Vector3(0.5, 0.68, 0.42).normalize();
+const skyMat = new THREE.ShaderMaterial({
   side: THREE.BackSide, depthWrite: false, fog: false,
   uniforms: { sun: { value: SUN } },
   vertexShader: 'varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
   fragmentShader: `uniform vec3 sun; varying vec3 vD;
     void main(){
       float h = clamp(vD.y, -0.2, 1.0);
-      vec3 top = vec3(0.24, 0.5, 0.86), hor = vec3(0.77, 0.86, 0.94), low = vec3(0.6, 0.7, 0.75);
-      vec3 c = h > 0.0 ? mix(hor, top, pow(h, 0.55)) : mix(hor, low, -h * 4.0);
+      vec3 top = vec3(0.2, 0.45, 0.85), hor = vec3(0.8, 0.88, 0.95), low = vec3(0.55, 0.64, 0.7);
+      vec3 c = h > 0.0 ? mix(hor, top, pow(h, 0.5)) : mix(hor, low, -h * 4.0);
+      c = pow(c, vec3(2.2));
       float s = max(0.0, dot(vD, sun));
-      c += vec3(1.0, 0.9, 0.7) * (pow(s, 600.0) * 2.0 + pow(s, 12.0) * 0.18);
+      c += vec3(1.0, 0.85, 0.6) * (pow(s, 900.0) * 30.0 + pow(s, 60.0) * 0.6 + pow(s, 8.0) * 0.12);
       gl_FragColor = vec4(c, 1.0);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
     }`,
-}));
+});
+const sky = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), skyMat);
 sky.renderOrder = -10;
 scene.add(sky);
 
-const hemi = new THREE.HemisphereLight(0xcfe6ff, 0x5c6b3c, 1.25);
+const hemi = new THREE.HemisphereLight(0xdfeaff, 0x6b6a45, 0.6);
 scene.add(hemi);
-const sun = new THREE.DirectionalLight(0xfff1d8, 2.8);
+const sun = new THREE.DirectionalLight(0xffecd0, 2.7);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 const SC = sun.shadow.camera;
 SC.left = SC.bottom = -70; SC.right = SC.top = 70; SC.near = 1; SC.far = 420;
-sun.shadow.bias = -0.0006;
-sun.shadow.normalBias = 0.04;
+sun.shadow.bias = -0.0005;
+sun.shadow.normalBias = 0.05;
 scene.add(sun, sun.target);
+
+// Umgebungslicht und Spiegelungen aus dem Himmel (bildbasierte Beleuchtung)
+{
+  const envScene = new THREE.Scene();
+  envScene.add(new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), skyMat));
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(45, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x4a6a32 }));
+  ground.position.y = -6;
+  envScene.add(ground);
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(envScene, 0.02).texture;
+  scene.environmentIntensity = 0.7;
+  pmrem.dispose();
+}
 
 // Wolken
 const cloudGeo = merge([
@@ -127,9 +157,12 @@ G.mapGroup = new THREE.Group();
 scene.add(G.mapGroup);
 G.pieces = new Pieces(G);
 G.loot = new Loot(G);
+G.vehicles = new Vehicles(G);
 G.fx = new Fx(G);
 G.sfx = new Sfx(G);
 G.zone = new Zone(G);
+G.post = new Post(renderer);
+G.grass = null;
 G.hud = new Hud(G);
 G.sfx.setVolume(G.settings.vol);
 G.bus = { start: new THREE.Vector3(), dir: new THREE.Vector3(1, 0, 0), speed: 24, dur: 16, t: 0, yaw: 0, doors: 3, pos: new THREE.Vector3(), mesh: busMesh };
@@ -142,11 +175,27 @@ G.seatPos = (a, out, dy = 0.6, kx = 1) => {
   return out.set(x * kx, dy, z).applyMatrix4(busMesh.matrixWorld);
 };
 
+function applyQuality() {
+  const q = Q();
+  if (sun.shadow.mapSize.x !== q.shadow) {
+    sun.shadow.mapSize.set(q.shadow, q.shadow);
+    if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+  }
+  if (q.grass && !G.grass) G.grass = new Grass(G, q.grass[0], q.grass[1]);
+  if (G.grass && q.grass && G.grass.N !== q.grass[0]) {
+    G.scene.remove(G.grass.mesh);
+    G.grass = new Grass(G, q.grass[0], q.grass[1]);
+  }
+  if (G.grass) G.grass.visible = !!q.grass;
+  resize();
+}
+
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
-  const pr = Math.min(window.devicePixelRatio || 1, G.settings.quality === 'hoch' ? 2 : 1);
+  const pr = Math.min(window.devicePixelRatio || 1, Q().pr);
   renderer.setPixelRatio(pr);
   renderer.setSize(w, h, false);
+  G.post.setSize(Math.round(w * pr), Math.round(h * pr));
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   const sc = h * pr / (2 * Math.tan(camera.fov * Math.PI / 360));
@@ -154,7 +203,7 @@ function resize() {
   G.fx.hard.mat.uniforms.uScale.value = sc;
 }
 window.addEventListener('resize', resize);
-resize();
+applyQuality();
 
 // ---------- Welt aufbauen ----------
 
@@ -167,6 +216,7 @@ function disposeMap() {
   G.world.clear();
   G.pieces.reset();
   G.loot.reset();
+  G.vehicles.reset();
   G.fx.clear();
   for (const a of G.actors) a.dispose();
   G.actors = []; G.bots = []; G.player = null;
@@ -179,6 +229,7 @@ function newWorld(seed) {
   G.rng = makeRng(seed);
   G.mapInfo = buildMap(G);
   G.hud.buildMap(G.mapInfo);
+  if (G.grass) G.grass.reset();
 }
 
 function planBus(rng) {
@@ -375,7 +426,12 @@ window.addEventListener('keydown', e => {
       case 'KeyR': if (G.buildMode) cycleMat(); else startReload(G, p); break;
       case 'KeyX': if (!G.editing) crouchToggle(G, p, (G.keys.ShiftLeft || G.keys.ShiftRight) && (G.keys.KeyW || G.keys.KeyA || G.keys.KeyS || G.keys.KeyD)); break;
       case 'KeyV': if (p.state === 'bus') G.busView = G.busView === 'innen' ? 'außen' : 'innen'; break;
-      case 'KeyE': interact(); break;
+      case 'KeyE':
+        if (p.state === 'car') G.vehicles.exit(p);
+        else if (G.carNear && (!G.interact || G.carNearD < G.interactD)) { finishEdit(false); G.buildMode = false; G.vehicles.enter(p, G.carNear); }
+        else interact();
+        break;
+      case 'KeyH': if (p.state === 'car') G.sfx.at('carhorn', p.pos); break;
       case 'KeyM': G.bigMap = !G.bigMap; $('bigmapWrap').hidden = !G.bigMap; break;
       case 'Space':
         if (p.state === 'bus') G.eject(p);
@@ -423,6 +479,7 @@ window.addEventListener('mousemove', e => {
   const s = 0.0022 * G.settings.sens / Math.sqrt(zoom);
   p.yaw -= e.movementX * s;
   p.pitch = clamp(p.pitch - e.movementY * s, -1.45, 1.45);
+  G.lastMouse = G.time;
 });
 
 function interact() {
@@ -476,6 +533,15 @@ function controlPlayer(dt) {
   const p = G.player, K = G.keys;
   if (!p.alive) { G.pieces.hideGhost(); return; }
   if (p.state === 'bus') return;
+  if (p.state === 'car') {
+    // Fahren: W/S Gas und Rückwärts, A/D lenken, Leertaste Handbremse
+    G.carInput = { throttle: (K.KeyW ? 1 : 0) - (K.KeyS ? 1 : 0), steer: (K.KeyA ? 1 : 0) - (K.KeyD ? 1 : 0), brake: !!K.Space };
+    G.interact = null; G.carNear = null; G.editHint = null;
+    G.buildMode = false;
+    G.pieces.hideGhost();
+    return;
+  }
+  G.carInput = null;
   let mx = (K.KeyD ? 1 : 0) - (K.KeyA ? 1 : 0), mz = (K.KeyS ? 1 : 0) - (K.KeyW ? 1 : 0);
   const l = Math.hypot(mx, mz);
   if (l > 0) { mx /= l; mz /= l; }
@@ -539,6 +605,10 @@ function controlPlayer(dt) {
   }
   const f = forward(p.yaw, 0, _F);
   G.interact = p.state === 'ground' ? G.loot.nearest(p.pos, f.x, f.z, 2.6, ['w', 'h']) : null;
+  G.carNear = p.state === 'ground' && !p.swimming ? G.vehicles.nearest(p.pos) : null;
+  const ip = G.interact && (G.interact.chest ? G.interact.chest.pos : G.interact.pickup.pos);
+  G.interactD = ip ? Math.hypot(ip.x - p.pos.x, ip.z - p.pos.z) : Infinity;
+  G.carNearD = G.carNear ? Math.hypot(G.carNear.pos.x - p.pos.x, G.carNear.pos.z - p.pos.z) - 1.2 : Infinity;
 }
 
 // ---------- Kamera ----------
@@ -584,6 +654,30 @@ function updateCamera(dt) {
     G.camYaw = yaw; G.camPitch = pitch;
     return;
   }
+  if (p.state === 'car' && p.vehicle) {
+    // Verfolgerkamera; richtet sich hinter dem Auto aus, wenn die Maus ruht
+    const v = p.vehicle;
+    if (G.time - (G.lastMouse || 0) > 1.2 && Math.abs(v.speed) > 3) p.yaw += wrapAngle(v.yaw + (v.speed < 0 ? Math.PI : 0) - p.yaw) * Math.min(1, dt * 2.5);
+    p.pitch = clamp(p.pitch, -0.7, 0.45);
+    forward(p.yaw, p.pitch - 0.12, _F);
+    _H.set(v.pos.x, v.pos.y + 1.9, v.pos.z);
+    const dist = v.type === 'traktor' ? 7 : 7.5 + Math.abs(v.speed) * 0.06;
+    _O.copy(_H).addScaledVector(_F, -dist);
+    _O.y += 0.6;
+    _D.subVectors(_O, _H);
+    const len = _D.length();
+    _D.divideScalar(len);
+    const h = G.world.raycast(_H.x, _H.y, _H.z, _D.x, _D.y, _D.z, len + 0.3, c => c.owner === v.pc);
+    if (h) _O.copy(_H).addScaledVector(_D, Math.max(0.3, h.t - 0.3));
+    camera.position.copy(_O);
+    camera.rotation.set(p.pitch - 0.12, p.yaw, 0);
+    G.camYaw = p.yaw; G.camPitch = p.pitch - 0.12;
+    G.hidePlayer = false;
+    const cf = 75 + Math.abs(v.speed) * 0.35;
+    if (Math.abs(camera.fov - cf) > 0.05) { camera.fov += (cf - camera.fov) * Math.min(1, dt * 6); camera.updateProjectionMatrix(); }
+    applyShake(dt);
+    return;
+  }
   const air = p.state === 'fall' || p.state === 'glide';
   const back = G.aiming ? 1.7 : air ? 6.5 : 3.6, side = air ? 0 : G.aiming ? 0.62 : 0.8, up = air ? 1.4 : 0.35;
   const footY = p.swimming ? WATER - 0.6 : p.pos.y;
@@ -602,6 +696,17 @@ function updateCamera(dt) {
   camera.rotation.set(pitch, yaw, 0);
   G.camYaw = yaw; G.camPitch = pitch;
   G.hidePlayer = G.scoped || camera.position.distanceTo(_H) < 0.7;
+  applyShake(dt);
+}
+
+// Kamerawackeln (Fallschaden, Explosionen in der Nähe)
+function applyShake(dt) {
+  if (!(G.shake > 0)) return;
+  const s = G.shake * 0.22;
+  camera.position.x += (Math.random() - 0.5) * s;
+  camera.position.y += (Math.random() - 0.5) * s;
+  camera.position.z += (Math.random() - 0.5) * s;
+  G.shake = Math.max(0, G.shake - dt * 2.2);
 }
 
 // ---------- Ablauf ----------
@@ -666,6 +771,7 @@ function update(dt) {
     if (B.t > B.dur + 6) busMesh.visible = false;
   }
   if (G.state === 'play') controlPlayer(dt);
+  G.vehicles.update(dt, G.state === 'play' ? G.carInput : null);
   for (const b of G.bots) b.brain.update(dt);
   separate();
   for (const a of G.actors) {
@@ -685,6 +791,7 @@ function update(dt) {
   const p = G.player;
   const out = G.zone.active && p.alive && p.state !== 'bus' && !G.zone.inside(p.pos.x, p.pos.z);
   G.sfx.storm(out ? 1 : 0);
+  G.sfx.engine(p.alive && p.state === 'car' && p.vehicle ? Math.abs(p.vehicle.speed) / p.vehicle.T.maxF : -1);
   scene.fog.color.setHex(out ? 0x8a5fb0 : 0xc4dcf0);
   scene.fog.near = out ? 20 : 140; scene.fog.far = out ? 160 : 430;
 }
@@ -726,7 +833,10 @@ function frame(now) {
   sun.target.position.set(fp.x, fp.y, fp.z);
   sky.position.copy(camera.position);
   clouds.position.x = (G.time * 1.5) % 200;
-  renderer.render(scene, camera);
+  G.wind.value += dt;
+  if (G.grass) G.grass.update(camera.position, dt);
+  if (Q().post) G.post.render(scene, camera);
+  else renderer.render(scene, camera);
 }
 
 // ---------- Menüs ----------
@@ -738,10 +848,13 @@ const CONTROLS = `
   <div><kbd>Leertaste</kbd> Springen / Abspringen / Gleiter</div><div><kbd>Maus</kbd> Umsehen &nbsp; <kbd>V</kbd> Bus-Ansicht</div>
   <div><kbd>Linke Maustaste</kbd> Schießen / Hacken / Bauen / Heilen</div><div><kbd>Rechte Maustaste</kbd> Zielen</div>
   <div><kbd>1</kbd> Spitzhacke &nbsp; <kbd>2</kbd>–<kbd>7</kbd> Inventar</div><div><kbd>Mausrad</kbd> Platz wechseln</div>
-  <div><kbd>E</kbd> Truhe öffnen / Aufheben</div><div><kbd>R</kbd> Nachladen</div>
+  <div><kbd>E</kbd> Truhe öffnen / Aufheben / Auto ein- und aussteigen</div><div><kbd>R</kbd> Nachladen</div>
+  <div>Im Auto: <kbd>W</kbd><kbd>S</kbd> Gas/Bremse &nbsp;<kbd>A</kbd><kbd>D</kbd> Lenken</div><div><kbd>Leertaste</kbd> Handbremse &nbsp; <kbd>H</kbd> Hupe</div>
   <div><kbd>Q</kbd> Wand &nbsp;<kbd>F</kbd> Boden &nbsp;<kbd>C</kbd> Rampe &nbsp;<kbd>B</kbd> Baumodus</div><div><kbd>R</kbd> / <kbd>Rechte Maustaste</kbd> Material (im Baumodus)</div>
   <div><kbd>G</kbd> Eigenes Bauteil bearbeiten</div><div><kbd>M</kbd> Karte &nbsp; <kbd>Esc</kbd> Pause</div>
 </div>`;
+
+const QSEL = q => [['ultra', 'Ultra'], ['hoch', 'Hoch'], ['niedrig', 'Niedrig']].map(([v, n]) => `<option value="${v}" ${v === q ? 'selected' : ''}>${n}</option>`).join('');
 
 function showScreen(html, cls) {
   const s = $('screen');
@@ -762,15 +875,17 @@ function showTitle() {
       <p class="sub">Spring aus dem Bus, plündere Truhen, baue Deckung – und überlebe bis zum Schluss.</p>
       <div class="opts">
         <label>Gegner <select id="optBots">${[9, 14, 19, 29].map(n => `<option ${n === S.bots ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+        <label>Grafik <select id="optQuality">${QSEL(S.quality)}</select></label>
         <label>Schwierigkeit <select id="optDiff">${[['leicht', 'Leicht'], ['normal', 'Normal'], ['schwer', 'Schwer']].map(([v, n]) => `<option value="${v}" ${v === S.diff ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
       </div>
       <button id="btnPlay" class="big">SPIELEN</button>
       ${CONTROLS}
-      <p class="tip">Tipp: Mit der Spitzhacke bekommst du Holz aus Bäumen, Stein aus Felsen und Metall aus Autos, Ampeln und Mülltonnen. Jedes Bauteil kostet 10 Material. Auf dem Boden liegen nur schwache Waffen – die guten sind in den Truhen. Zur Insel im See musst du schwimmen oder eine Brücke bauen.</p>
+      <p class="tip">Tipp: Mit der Spitzhacke bekommst du Holz aus Bäumen, Stein aus Felsen und Metall aus Autos, Ampeln und Mülltonnen. Jedes Bauteil kostet 10 Material. Auf dem Boden liegen nur schwache Waffen – die guten sind in den Truhen. Zur Insel im See musst du schwimmen oder eine Brücke bauen. Autos kannst du fahren – aber Vorsicht vor Fallschaden und Unfällen!</p>
     </div>`, 'title');
   $('btnPlay').onclick = () => {
     G.settings.bots = Number($('optBots').value);
     G.settings.diff = $('optDiff').value;
+    if (G.settings.quality !== $('optQuality').value) { G.settings.quality = $('optQuality').value; applyQuality(); }
     saveSettings();
     G.sfx.init();
     startPlaying();
@@ -798,7 +913,7 @@ function pause() {
         <label>Mausempfindlichkeit <input id="setSens" type="range" min="0.2" max="3" step="0.05" value="${S.sens}"><output>${S.sens.toFixed(2)}</output></label>
         <label>Lautstärke <input id="setVol" type="range" min="0" max="1" step="0.05" value="${S.vol}"><output>${Math.round(S.vol * 100)}%</output></label>
         <label>Schatten <input id="setShadows" type="checkbox" ${S.shadows ? 'checked' : ''}></label>
-        <label>Grafik <select id="setQuality"><option value="hoch" ${S.quality === 'hoch' ? 'selected' : ''}>Hoch</option><option value="niedrig" ${S.quality === 'niedrig' ? 'selected' : ''}>Niedrig</option></select></label>
+        <label>Grafik <select id="setQuality">${QSEL(S.quality)}</select></label>
       </div>
       ${CONTROLS}
       <div class="row"><button id="btnRestart">Neues Spiel</button><button id="btnMenu">Hauptmenü</button></div>
@@ -813,7 +928,7 @@ function pause() {
     renderer.shadowMap.enabled = S.shadows;
     scene.traverse(o => { if (o.material) { for (const m of [].concat(o.material)) m.needsUpdate = true; } });
   };
-  $('setQuality').onchange = e => { S.quality = e.target.value; saveSettings(); resize(); };
+  $('setQuality').onchange = e => { S.quality = e.target.value; saveSettings(); applyQuality(); };
 }
 
 function showEnd(win) {

@@ -24,12 +24,14 @@ void main() {
   vec2 p = vec2(vUv.x * 160.0, vW.y * 0.06);
   float a = n(p + vec2(uTime * 0.6, -uTime * 0.25)) * 0.6 + n(p * 2.3 - vec2(uTime * 0.9, uTime * 0.4)) * 0.4;
   float band = smoothstep(0.35, 0.85, a);
-  vec3 col = mix(vec3(0.36, 0.12, 0.62), vec3(0.75, 0.45, 1.0), band);
+  vec3 col = pow(mix(vec3(0.36, 0.12, 0.62), vec3(0.75, 0.45, 1.0), band), vec3(2.2));
   float alpha = 0.42 + band * 0.25;
   float d = distance(cameraPosition.xz, vW.xz);
   alpha *= mix(1.0, 0.45, smoothstep(40.0, 230.0, d));        // weit weg blasser
   alpha *= 1.0 - smoothstep(55.0, 110.0, vW.y);                 // nach oben ausblenden
   gl_FragColor = vec4(col, alpha);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
 }`;
 
 export class Zone {

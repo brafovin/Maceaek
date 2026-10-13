@@ -29,13 +29,16 @@ und dann <http://localhost:8000/kampfzone/> öffnen. Gespielt wird mit Maus und 
 | rechte Maustaste | zielen (Scharfschützengewehr: Zielfernrohr) · im Baumodus: Material wechseln · beim Bearbeiten: zurücksetzen |
 | `1` | Spitzhacke |
 | `2` – `7` | die 6 Inventarplätze (auch Mausrad) |
-| `E` | Truhe öffnen / Gegenstand aufheben (bei vollem Inventar: mit dem gewählten Platz tauschen) |
+| `E` | Truhe öffnen / Gegenstand aufheben (bei vollem Inventar: mit dem gewählten Platz tauschen) / ins Auto ein- und aussteigen |
+| im Auto: `W` `S` | Gas geben / bremsen und rückwärts |
+| im Auto: `A` `D` | lenken |
+| im Auto: `Leertaste` / `H` | Handbremse / Hupe |
 | `R` | nachladen · im Baumodus: Material wechseln (Holz → Stein → Metall) |
 | `Q` / `F` / `C` | Wand / Boden / Rampe bauen (Baumodus) |
 | `B` | Baumodus an/aus |
 | `G` | eigenes Bauteil bearbeiten / Bearbeitung bestätigen |
 | `M` | große Karte |
-| `Esc` | Pause (Empfindlichkeit, Lautstärke, Schatten, Grafik) |
+| `Esc` | Pause (Empfindlichkeit, Lautstärke, Schatten, Grafikstufe) |
 
 ## Was es gibt
 
@@ -59,6 +62,15 @@ und dann <http://localhost:8000/kampfzone/> öffnen. Gespielt wird mit Maus und 
   Rechte Maustaste setzt zurück, `G` bestätigt.
 * **Bewegung:** Sprinten (`Shift`), Schleichen (`X`, lautlos und für Bots schwer zu entdecken) und Rutschen
   (`X` während des Sprints – kurzer Geschwindigkeitsschub, danach geduckt). Schritte sind zu hören, beim Schleichen nicht.
+* **Autos:** alle geparkten Autos (Stadt, Siedlung, Landstraße, Bauernhof) und der Traktor lassen sich fahren.
+  Räder folgen Hügeln, Bordsteinen und gebauten Rampen – mit Rampen springt man. Zusammenstöße beschädigen
+  Auto und Fahrer, wer überfahren wird, nimmt Schaden. Zerschossene Autos explodieren. Im tiefen Wasser säuft der
+  Motor ab. Tacho und Fahrzeugzustand unten in der Mitte.
+* **Fallschaden:** ab etwa 5 m Fallhöhe, ab etwa 25 m tödlich (ohne Schild-Schutz) – mit Anzeige, Geräusch und
+  Kamerawackeln. Gleiter und Landungen im Wasser sind sicher; harte Landungen mit dem Auto tun weh.
+* **Grafik:** sanfte Hügel, Gras und Bäume im Wind, Spiegelungen von Himmel und Sonne (Wasser, Glasfassaden,
+  Autos), Leuchteffekte, Farbabstimmung und Vignette. Stufen im Menü: *Ultra*, *Hoch* (Standard), *Niedrig*
+  (ohne Nachbearbeitung und Gras, für schwächere Rechner).
 * **Wasser:** vier Seen (Inselsee, Waldsee, Mühlteich, Fischteich) und ein Fluss. Im tiefen Wasser schwimmst du
   langsam (ohne Waffe), im flachen Wasser watest du. Kein Fallschaden bei Landung im Wasser.
 * **Insel im Inselsee:** Leuchtturm mit drehendem Lichtkegel, Fischerhütte, Steg mit Leiter, Ruderboot und Truhen.
@@ -80,8 +92,10 @@ und dann <http://localhost:8000/kampfzone/> öffnen. Gespielt wird mit Maus und 
 | --- | --- |
 | `main.js` | Renderer, Eingabe, Kamera, Battle-Bus, Spielablauf, Menüs |
 | `map.js` | Karte: Straßen, Gebäude, Kirche, Siedlung, Bauernhof, Insel, Ampeln, Mülltonnen, Natur, Truhen |
-| `terrain.js` | Gelände mit Seen, Fluss und Insel, Sandstrand, Wasseroberfläche |
+| `terrain.js` | Gelände mit Hügeln, Seen, Fluss und Insel, Sandstrand, Wasseroberfläche |
 | `bus.js` | der Linienbus mit Ballon, Sitzplätzen und Fahrer |
+| `vehicles.js` | fahrbare Autos und Traktor |
+| `post.js`, `grass.js` | Nachbearbeitung (Leuchten, Farbe) und Gras |
 | `pieces.js` | zerstörbare Teile (Instanz-Pools), Bausystem, Bearbeiten |
 | `physics.js` | Kollision (Boxen + Schrägen im Raster), Figurenbewegung, Strahltests |
 | `actors.js` | Figuren: Modell, Animation, Schießen, Spitzhacke, Heilen, Schaden, Schleichen, Rutschen, Schwimmen |
