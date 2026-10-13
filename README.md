@@ -3,6 +3,10 @@
 Gra 3D z działem portalowym w przeglądarce (three.js, bez bundlera) – 30 poziomów logicznych („Komora testowa”):
 od prostych skoków przez portal, przez pęd i kostki, po zegary, fizzlery, odbicia w lustrach i finał, który wymaga pomysłu.
 
+> **Neu: [Kampfzone](kampfzone/)** – ein zweites Spiel im Ordner `kampfzone/`: Battle Royale mit Bus-Absprung,
+> Truhen, Waffen, Bauen (Wand/Boden/Rampe), Spitzhacke, schrumpfender Zone, einer Stadt mit 10 Gebäuden, Kirche,
+> Ampeln und Mülltonnen. Anleitung auf Deutsch: [kampfzone/README.md](kampfzone/README.md).
+
 ## Sterowanie
 
 | Klawisz | Akcja |

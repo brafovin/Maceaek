@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Kampfzone – Battle Royale</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body data-screen="menu">
+<canvas id="c" aria-label="Spielansicht"></canvas>
+
+<div id="hud" hidden>
+  <div id="storm"></div>
+  <div id="hurt"></div>
+  <div id="hurtDir"></div>
+  <div id="scope" hidden></div>
+
+  <!-- oben links: Abschussliste -->
+  <div id="killfeed" aria-live="polite"></div>
+
+  <!-- oben rechts: Minikarte, Zone, Spieler übrig -->
+  <div id="topright">
+    <canvas id="minimap" width="200" height="200"></canvas>
+    <div id="zoneinfo"><span id="zonePhase" title="Phase"></span><span id="zoneLabel"></span><b id="zoneTime"></b></div>
+    <div id="counts">
+      <span title="Spieler übrig"><svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="4"/><path d="M4 21c0-5 4-8 8-8s8 3 8 8z"/></svg><b id="alive">0</b></span>
+      <span title="Eliminierungen"><svg viewBox="0 0 24 24"><path d="M12 2a8 8 0 0 0-8 8c0 3 1.5 5 3 6v3h10v-3c1.5-1 3-3 3-6a8 8 0 0 0-8-8zm-3 9a1.6 1.6 0 1 1 0-3.2A1.6 1.6 0 0 1 9 11zm6 0a1.6 1.6 0 1 1 0-3.2 1.6 1.6 0 0 1 0 3.2z"/></svg><b id="kills">0</b></span>
+    </div>
+  </div>
+
+  <!-- Mitte -->
+  <div id="crosshair" data-mode="gun"><i></i><i></i><i></i><i></i><b></b></div>
+  <div id="hitmarker"></div>
+  <div id="dmgnums"></div>
+  <div id="notice"></div>
+  <div id="prompt" hidden></div>
+  <div id="useBar" hidden><div></div><span></span></div>
+  <div id="pieceHp" hidden><i></i><span></span></div>
+
+  <!-- unten links: Leben und Schild -->
+  <div id="vitals">
+    <div class="bar sh"><div class="fill" id="shFill"></div><svg viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z"/></svg><b id="shNum">0</b></div>
+    <div class="bar hp"><div class="fill" id="hpFill"></div><svg viewBox="0 0 24 24"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/></svg><b id="hpNum">100</b></div>
+    <div class="lbl">LEBEN</div>
+  </div>
+
+  <!-- unten Mitte: Baumodus -->
+  <div id="buildbar" hidden><div id="buildmat"></div></div>
+
+  <!-- unten rechts: Inventar (Spitzhacke + 6 Plätze) -->
+  <div id="inventory">
+    <div id="itemName"></div>
+    <div id="ammoLine" hidden></div>
+    <div id="mats"></div>
+    <div id="slots"></div>
+  </div>
+
+  <div id="lockHint" hidden>Klicke ins Bild, um weiterzuspielen</div>
+  <div id="bigmapWrap" hidden><canvas id="bigmap" width="640" height="640"></canvas><p><kbd>M</kbd> Karte schließen</p></div>
+</div>
+
+<div id="screen" hidden></div>
+<div id="err" role="alert" hidden></div>
+
+<script type="module" src="./main.js"></script>
+</body>
+</html>
